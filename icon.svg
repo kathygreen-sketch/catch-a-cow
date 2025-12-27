@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="Catch a Cow">
+  <rect width="128" height="128" rx="24" fill="#f5f1e7"/>
+  <rect x="18" y="72" width="92" height="24" rx="12" fill="#8ed081"/>
+  <rect x="30" y="42" width="68" height="32" rx="8" fill="#8a5c3d"/>
+  <rect x="42" y="32" width="44" height="12" rx="6" fill="#f2e6c9"/>
+  <rect x="34" y="66" width="12" height="10" rx="4" fill="#3a2b1a"/>
+  <rect x="82" y="66" width="12" height="10" rx="4" fill="#3a2b1a"/>
+  <rect x="48" y="88" width="32" height="16" rx="4" fill="#6b3f1d"/>
+</svg>

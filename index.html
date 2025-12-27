@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#e07a4e" />
+    <link rel="manifest" href="manifest.json" />
+    <link rel="apple-touch-icon" href="icon.svg" />
+    <title>Catch a Cow - V1</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="app">
+      <header class="topbar">
+        <div class="title">
+          <div class="logo">
+            <img class="logo-icon" src="cow icon.png" alt="Cow icon" />
+            <span>Catch a Cow</span>
+          </div>
+          <div class="subtitle">99 cows. Math wins the grassland.</div>
+        </div>
+        <div class="status">
+          <div class="pill" id="connectionStatus">Offline</div>
+          <div class="pill" id="timeOfDay">Day</div>
+          <div class="pill" id="weather">Weather: Sun</div>
+          <div class="pill" id="timer">Next shift: 60s</div>
+        </div>
+      </header>
+
+      <main class="layout">
+        <section class="panel" id="leftPanel">
+          <h2>My Farm</h2>
+          <div class="stat">
+            <div class="label">Farm Name</div>
+            <div class="value" id="farmNameValue">-</div>
+          </div>
+          <div class="stat">
+            <div class="label">Cows Owned</div>
+            <div class="value" id="cowCount">0</div>
+          </div>
+          <div class="stat">
+            <div class="label">Fence Strength</div>
+            <div class="value" id="fenceStrength">1</div>
+          </div>
+          <div class="stat">
+            <div class="label">Fence Height</div>
+            <div class="value" id="fenceHeight">1</div>
+          </div>
+          <div class="stat">
+            <div class="label">Credits</div>
+            <div class="value" id="credits">0</div>
+          </div>
+          <div class="stat">
+            <div class="label">Locks</div>
+            <div class="value" id="lockLevel">0</div>
+          </div>
+          <div class="stat">
+            <div class="label">Hint Tokens</div>
+            <div class="value" id="hintTokens">0</div>
+          </div>
+          <button id="upgradeFenceBtn" class="action">Upgrade Fence (Math)</button>
+          <button id="upgradeLockBtn" class="action">Buy Lock (10 credits)</button>
+          <button id="buyHintsBtn" class="action">Buy Hint Token (12 credits)</button>
+
+          <div class="divider"></div>
+          <h3>Town Leaderboard</h3>
+          <div id="leaderboard" class="leaderboard"></div>
+        </section>
+
+        <section class="world">
+          <canvas id="worldCanvas" width="960" height="560"></canvas>
+          <canvas id="minimap" width="180" height="120"></canvas>
+          <div class="touch-controls" id="touchControls" aria-hidden="true">
+            <button class="touch-btn" data-dir="up">▲</button>
+            <div class="touch-row">
+              <button class="touch-btn" data-dir="left">◀</button>
+              <button class="touch-btn" data-dir="down">▼</button>
+              <button class="touch-btn" data-dir="right">▶</button>
+            </div>
+          </div>
+          <div class="hud">
+            <div class="hint">Move: WASD or Arrow Keys | Scan: auto when close</div>
+          </div>
+        </section>
+
+        <section class="panel" id="rightPanel">
+          <h2>Target Cow</h2>
+          <div id="cowProfile" class="profile">No cow nearby. Explore the grassland.</div>
+          <div class="actions">
+            <button id="ropeBtn" class="action" disabled>Build Rope</button>
+            <button id="netBtn" class="action" disabled>Build Net</button>
+          </div>
+
+          <div class="divider"></div>
+          <h3>Math Workshop</h3>
+          <div id="puzzleBox" class="puzzle">
+            Solve math to build tools, fences, and defenses.
+          </div>
+        </section>
+      </main>
+
+      <section class="log">
+        <div class="log-title">Town Feed</div>
+        <div id="logFeed" class="log-feed"></div>
+      </section>
+    </div>
+
+    <div class="modal" id="startModal">
+      <div class="modal-card">
+        <h2>Start Your Farm</h2>
+        <p>Name your farm and claim a plot on the grassland.</p>
+        <input id="farmNameInput" type="text" maxlength="20" placeholder="e.g., Meadowlight Farm" />
+        <button id="startBtn" class="action">Start Game</button>
+        <div class="note">99 cows exist in the world. Catch the most to be richest in town.</div>
+      </div>
+    </div>
+
+    <script src="data.js"></script>
+    <script src="app.js"></script>
+  </body>
+</html>
