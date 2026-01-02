@@ -6,8 +6,8 @@ const WebSocket = require("ws");
 const PORT = Number(process.env.PORT || 8080);
 const HOST = process.env.HOST || "0.0.0.0";
 const WORLD_SIZE = 2000;
-const CYCLE_MS = 60000;
-const NIGHT_MS = 15000;
+const CYCLE_MS = 180000;  // 3 minutes total cycle
+const NIGHT_MS = 45000;   // 45 seconds night
 const WEATHER_TYPES = ["sun", "rain", "wind", "fog"];
 
 function loadCows() {

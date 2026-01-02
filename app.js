@@ -65,8 +65,8 @@ const state = {
   weather: WEATHER_TYPES[0],
   dayTime: "day",
   cycleStart: performance.now(),
-  cycleLengthMs: 60000,
-  nightLengthMs: 15000,
+  cycleLengthMs: 180000,  // 3 minutes total
+  nightLengthMs: 45000,   // 45 seconds night
   selectedCowId: null,
   puzzle: null,
   nightRaidActive: false,
@@ -1045,43 +1045,188 @@ function drawChatBubbles(camX, camY) {
   });
 }
 
+// Weather animation state
+const weatherParticles = {
+  rain: [],
+  wind: [],
+  fog: [],
+  initialized: false,
+};
+
+function initWeatherParticles(viewW, viewH) {
+  // Rain drops
+  weatherParticles.rain = [];
+  for (let i = 0; i < 150; i++) {
+    weatherParticles.rain.push({
+      x: Math.random() * viewW,
+      y: Math.random() * viewH,
+      speed: 8 + Math.random() * 6,
+      length: 10 + Math.random() * 15,
+    });
+  }
+
+  // Wind streaks
+  weatherParticles.wind = [];
+  for (let i = 0; i < 60; i++) {
+    weatherParticles.wind.push({
+      x: Math.random() * viewW,
+      y: Math.random() * viewH,
+      speed: 4 + Math.random() * 4,
+      length: 30 + Math.random() * 40,
+      opacity: 0.1 + Math.random() * 0.2,
+    });
+  }
+
+  // Fog clouds
+  weatherParticles.fog = [];
+  for (let i = 0; i < 20; i++) {
+    weatherParticles.fog.push({
+      x: Math.random() * viewW,
+      y: Math.random() * viewH,
+      radius: 80 + Math.random() * 120,
+      speed: 0.3 + Math.random() * 0.5,
+      opacity: 0.15 + Math.random() * 0.15,
+    });
+  }
+
+  weatherParticles.initialized = true;
+}
+
 function drawEnvironmentOverlay(viewW, viewH) {
+  if (!weatherParticles.initialized) {
+    initWeatherParticles(viewW, viewH);
+  }
+
   ctx.save();
+
+  // Night overlay with gradient
   if (state.dayTime === "night") {
-    ctx.fillStyle = "rgba(20, 22, 38, 0.35)";
+    const gradient = ctx.createRadialGradient(viewW / 2, viewH / 2, 100, viewW / 2, viewH / 2, viewW);
+    gradient.addColorStop(0, "rgba(20, 22, 38, 0.25)");
+    gradient.addColorStop(1, "rgba(10, 12, 25, 0.5)");
+    ctx.fillStyle = gradient;
     ctx.fillRect(0, 0, viewW, viewH);
+
+    // Stars at night
+    ctx.fillStyle = "rgba(255, 255, 220, 0.6)";
+    for (let i = 0; i < 30; i++) {
+      const x = (i * 73 + 20) % viewW;
+      const y = (i * 47 + 10) % (viewH * 0.4);
+      const size = 1 + (i % 3);
+      ctx.beginPath();
+      ctx.arc(x, y, size, 0, Math.PI * 2);
+      ctx.fill();
+    }
   }
 
+  // Sun rays during sunny day
+  if (state.weather === "sun" && state.dayTime === "day") {
+    const gradient = ctx.createRadialGradient(viewW * 0.8, 50, 0, viewW * 0.8, 50, 200);
+    gradient.addColorStop(0, "rgba(255, 245, 180, 0.3)");
+    gradient.addColorStop(0.5, "rgba(255, 245, 180, 0.1)");
+    gradient.addColorStop(1, "rgba(255, 245, 180, 0)");
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, 0, viewW, viewH);
+
+    // Sun
+    ctx.fillStyle = "rgba(255, 220, 100, 0.8)";
+    ctx.beginPath();
+    ctx.arc(viewW * 0.85, 40, 25, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // Fog effect with moving clouds
   if (state.weather === "fog") {
-    ctx.fillStyle = "rgba(220, 230, 235, 0.25)";
+    ctx.fillStyle = "rgba(200, 210, 220, 0.2)";
     ctx.fillRect(0, 0, viewW, viewH);
+
+    weatherParticles.fog.forEach((cloud) => {
+      cloud.x += cloud.speed;
+      if (cloud.x > viewW + cloud.radius) {
+        cloud.x = -cloud.radius;
+      }
+
+      const gradient = ctx.createRadialGradient(cloud.x, cloud.y, 0, cloud.x, cloud.y, cloud.radius);
+      gradient.addColorStop(0, `rgba(220, 230, 240, ${cloud.opacity})`);
+      gradient.addColorStop(1, "rgba(220, 230, 240, 0)");
+      ctx.fillStyle = gradient;
+      ctx.beginPath();
+      ctx.arc(cloud.x, cloud.y, cloud.radius, 0, Math.PI * 2);
+      ctx.fill();
+    });
   }
 
+  // Rain effect with animated drops
   if (state.weather === "rain") {
-    ctx.strokeStyle = "rgba(120, 150, 180, 0.35)";
-    ctx.lineWidth = 1;
-    for (let i = 0; i < 80; i += 1) {
-      const x = (i * 27) % viewW;
-      const y = (i * 19) % viewH;
+    // Dark overlay for rain
+    ctx.fillStyle = "rgba(60, 70, 90, 0.15)";
+    ctx.fillRect(0, 0, viewW, viewH);
+
+    ctx.strokeStyle = "rgba(150, 180, 220, 0.5)";
+    ctx.lineWidth = 2;
+
+    weatherParticles.rain.forEach((drop) => {
+      drop.y += drop.speed;
+      drop.x += 1; // Slight angle
+      if (drop.y > viewH) {
+        drop.y = -drop.length;
+        drop.x = Math.random() * viewW;
+      }
+
       ctx.beginPath();
-      ctx.moveTo(x, y);
-      ctx.lineTo(x + 6, y + 12);
+      ctx.moveTo(drop.x, drop.y);
+      ctx.lineTo(drop.x + 3, drop.y + drop.length);
+      ctx.stroke();
+    });
+
+    // Puddle ripples at bottom
+    ctx.strokeStyle = "rgba(150, 180, 220, 0.3)";
+    ctx.lineWidth = 1;
+    for (let i = 0; i < 8; i++) {
+      const x = (i * 120 + (performance.now() / 50) % 120) % viewW;
+      const y = viewH - 20 - (i % 3) * 10;
+      const size = 5 + (performance.now() / 200 + i) % 15;
+      ctx.beginPath();
+      ctx.ellipse(x, y, size, size / 3, 0, 0, Math.PI * 2);
       ctx.stroke();
     }
   }
 
+  // Wind effect with animated streaks
   if (state.weather === "wind") {
-    ctx.strokeStyle = "rgba(255, 255, 255, 0.25)";
-    ctx.lineWidth = 2;
-    for (let i = 0; i < 40; i += 1) {
-      const x = (i * 35) % viewW;
-      const y = (i * 23) % viewH;
+    weatherParticles.wind.forEach((streak) => {
+      streak.x += streak.speed;
+      if (streak.x > viewW + streak.length) {
+        streak.x = -streak.length;
+        streak.y = Math.random() * viewH;
+      }
+
+      ctx.strokeStyle = `rgba(255, 255, 255, ${streak.opacity})`;
+      ctx.lineWidth = 2;
       ctx.beginPath();
-      ctx.moveTo(x, y);
-      ctx.lineTo(x + 20, y + 4);
+      ctx.moveTo(streak.x, streak.y);
+      // Wavy line for wind
+      ctx.quadraticCurveTo(
+        streak.x + streak.length / 2,
+        streak.y + Math.sin(streak.x / 30) * 5,
+        streak.x + streak.length,
+        streak.y + Math.sin(streak.x / 20) * 3
+      );
       ctx.stroke();
+    });
+
+    // Leaves/debris
+    ctx.fillStyle = "rgba(120, 160, 80, 0.4)";
+    for (let i = 0; i < 15; i++) {
+      const t = performance.now() / 1000;
+      const x = ((i * 130 + t * 80) % (viewW + 50)) - 25;
+      const y = (i * 70 + Math.sin(t * 2 + i) * 30) % viewH;
+      ctx.beginPath();
+      ctx.ellipse(x, y, 4, 2, t + i, 0, Math.PI * 2);
+      ctx.fill();
     }
   }
+
   ctx.restore();
 }
 
