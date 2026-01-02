@@ -71,31 +71,82 @@ const npcFarms = [
 function initFarms() {
   const centerX = WORLD_SIZE / 2;
   const centerY = WORLD_SIZE / 2;
-  const radius = 520;
+  const radius = 600; // Larger radius for better spacing
   state.farms = npcFarms.map((farm, index) => {
-    const angle = (Math.PI * 2 * index) / npcFarms.length + 0.6;
+    const angle = (Math.PI * 2 * index) / npcFarms.length;
     return {
       id: farm.id,
       name: farm.name,
       x: centerX + Math.cos(angle) * radius,
       y: centerY + Math.sin(angle) * radius,
       cowsList: [],
+      fenceStrength: 2 + index, // NPCs have some defense
+      lockLevel: index,
     };
   });
 }
 
 initFarms();
 
+const MIN_FARM_DISTANCE = 250; // Minimum pixels between farm centers
+
 function getNextFarmPosition() {
-  const centerX = WORLD_SIZE / 2;
-  const centerY = WORLD_SIZE / 2;
-  const radius = 520;
-  const index = state.nextFarmIndex + npcFarms.length;
-  const angle = (Math.PI * 2 * index) / (npcFarms.length + 8) + 0.2;
-  state.nextFarmIndex += 1;
+  const maxAttempts = 50;
+
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    // Try positions in expanding circles
+    const baseRadius = 400 + (attempt * 50);
+    const angle = Math.random() * Math.PI * 2;
+    const radius = baseRadius + Math.random() * 200;
+
+    const x = WORLD_SIZE / 2 + Math.cos(angle) * radius;
+    const y = WORLD_SIZE / 2 + Math.sin(angle) * radius;
+
+    // Clamp to world bounds with padding for farm size
+    const clampedX = Math.max(120, Math.min(WORLD_SIZE - 120, x));
+    const clampedY = Math.max(120, Math.min(WORLD_SIZE - 120, y));
+
+    // Check distance from all existing farms
+    let tooClose = false;
+    for (const farm of state.farms) {
+      const dx = farm.x - clampedX;
+      const dy = farm.y - clampedY;
+      const dist = Math.hypot(dx, dy);
+      if (dist < MIN_FARM_DISTANCE) {
+        tooClose = true;
+        break;
+      }
+    }
+
+    if (!tooClose) {
+      return { x: clampedX, y: clampedY };
+    }
+  }
+
+  // Fallback: find any valid position
+  for (let i = 0; i < 100; i++) {
+    const x = 200 + Math.random() * (WORLD_SIZE - 400);
+    const y = 200 + Math.random() * (WORLD_SIZE - 400);
+
+    let valid = true;
+    for (const farm of state.farms) {
+      const dist = Math.hypot(farm.x - x, farm.y - y);
+      if (dist < MIN_FARM_DISTANCE) {
+        valid = false;
+        break;
+      }
+    }
+
+    if (valid) {
+      return { x, y };
+    }
+  }
+
+  // Last resort: offset from center
+  const offset = state.farms.length * 300;
   return {
-    x: centerX + Math.cos(angle) * radius,
-    y: centerY + Math.sin(angle) * radius,
+    x: WORLD_SIZE / 2 + (offset % (WORLD_SIZE - 400)) - (WORLD_SIZE - 400) / 2,
+    y: WORLD_SIZE / 2 + Math.floor(offset / (WORLD_SIZE - 400)) * 300,
   };
 }
 
