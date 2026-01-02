@@ -31,6 +31,7 @@ const startBtn = document.getElementById("startBtn");
 const chatContainer = document.getElementById("chatContainer");
 const chatInput = document.getElementById("chatInput");
 const chatSendBtn = document.getElementById("chatSendBtn");
+const dissolveFarmBtn = document.getElementById("dissolveFarmBtn");
 
 const WORLD_SIZE = 2000;
 const VIEW_PADDING = 80;
@@ -1740,6 +1741,24 @@ netBtn.addEventListener("click", () => {
 upgradeFenceBtn.addEventListener("click", upgradeFence);
 upgradeLockBtn.addEventListener("click", upgradeLocks);
 buyHintsBtn.addEventListener("click", buyHintTokens);
+
+dissolveFarmBtn.addEventListener("click", () => {
+  if (!state.online) {
+    logEvent("You must be online to dissolve your farm.", "negative");
+    return;
+  }
+  const confirmed = confirm(
+    `Are you sure you want to dissolve "${state.farmName}"?\n\n` +
+    `• All ${state.captured.length} cows will be released to the wild\n` +
+    `• Your farm will be removed from the map\n` +
+    `• You will need to refresh to start a new farm\n\n` +
+    `This cannot be undone!`
+  );
+  if (confirmed) {
+    sendToServer({ type: "dissolveFarm" });
+    logEvent("Your farm has been dissolved. Refresh to start over.", "neutral");
+  }
+});
 
 // Chat functionality
 let chatOpen = false;

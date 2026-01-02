@@ -645,10 +645,60 @@ wss.on("connection", (ws) => {
       playerFarm.lockLevel = message.lockLevel || playerFarm.lockLevel;
       return;
     }
+
+    if (message.type === "dissolveFarm") {
+      // Release all cows back to wild
+      playerFarm.cowsList.forEach((cowId) => {
+        const cow = state.cows.find((c) => c.id === cowId);
+        if (cow) {
+          cow.status = "wild";
+          cow.owner = null;
+          cow.x = 200 + Math.random() * (WORLD_SIZE - 400);
+          cow.y = 200 + Math.random() * (WORLD_SIZE - 400);
+        }
+      });
+
+      // Notify everyone
+      broadcast({ type: "event", message: `${playerFarm.name} has dissolved their farm. ${playerFarm.cowsList.length} cows released!` });
+
+      // Remove the farm
+      const farmIndex = state.farms.findIndex((f) => f.id === playerId);
+      if (farmIndex !== -1) {
+        state.farms.splice(farmIndex, 1);
+      }
+
+      // Close the connection
+      ws.close();
+      return;
+    }
   });
 
   ws.on("close", () => {
     state.players.delete(playerId);
+
+    // Remove the player's farm and release their cows
+    const farmIndex = state.farms.findIndex((f) => f.id === playerId);
+    if (farmIndex !== -1) {
+      const farm = state.farms[farmIndex];
+
+      // Release all cows back to wild
+      farm.cowsList.forEach((cowId) => {
+        const cow = state.cows.find((c) => c.id === cowId);
+        if (cow) {
+          cow.status = "wild";
+          cow.owner = null;
+          // Move cow to random position away from farms
+          cow.x = 200 + Math.random() * (WORLD_SIZE - 400);
+          cow.y = 200 + Math.random() * (WORLD_SIZE - 400);
+        }
+      });
+
+      // Remove the farm
+      state.farms.splice(farmIndex, 1);
+
+      // Notify remaining players
+      broadcast({ type: "event", message: `${farm.name} has been abandoned. Their cows are now wild!` });
+    }
   });
 });
 
