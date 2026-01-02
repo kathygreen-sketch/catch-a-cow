@@ -932,13 +932,77 @@ function drawWorld() {
     if (screenX < -VIEW_PADDING || screenX > viewW + VIEW_PADDING) return;
     if (screenY < -VIEW_PADDING || screenY > viewH + VIEW_PADDING) return;
 
-    ctx.fillStyle = "#8a5c3d";
-    ctx.fillRect(screenX - 10, screenY - 8, 20, 16);
-    ctx.fillStyle = "#f2e6c9";
-    ctx.fillRect(screenX - 6, screenY - 12, 12, 5);
+    const isHappy = cow.favoredWeather === state.weather;
+    const t = performance.now() / 1000;
+
+    // Bounce effect when happy
+    const bounce = isHappy ? Math.abs(Math.sin(t * 4 + cow.id.charCodeAt(0))) * 4 : 0;
+    const drawY = screenY - bounce;
+
+    // Glow effect when happy
+    if (isHappy) {
+      ctx.save();
+      ctx.shadowColor = "#ffdd44";
+      ctx.shadowBlur = 15;
+      ctx.fillStyle = "rgba(255, 220, 100, 0.3)";
+      ctx.beginPath();
+      ctx.arc(screenX, drawY, 18, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    }
+
+    // Cow body - pink tint when happy
+    ctx.fillStyle = isHappy ? "#c4826d" : "#8a5c3d";
+    ctx.fillRect(screenX - 10, drawY - 8, 20, 16);
+
+    // Cow head
+    ctx.fillStyle = isHappy ? "#fff0e0" : "#f2e6c9";
+    ctx.fillRect(screenX - 6, drawY - 12, 12, 5);
+
+    // Legs
     ctx.fillStyle = "#3a2b1a";
-    ctx.fillRect(screenX - 9, screenY - 2, 4, 4);
-    ctx.fillRect(screenX + 5, screenY - 2, 4, 4);
+    ctx.fillRect(screenX - 9, drawY - 2, 4, 4);
+    ctx.fillRect(screenX + 5, drawY - 2, 4, 4);
+
+    // Happy face when weather matches
+    if (isHappy) {
+      // Rosy cheeks
+      ctx.fillStyle = "rgba(255, 150, 150, 0.5)";
+      ctx.beginPath();
+      ctx.arc(screenX - 4, drawY - 9, 2, 0, Math.PI * 2);
+      ctx.arc(screenX + 4, drawY - 9, 2, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Smile
+      ctx.strokeStyle = "#3a2b1a";
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.arc(screenX, drawY - 8, 3, 0.2, Math.PI - 0.2);
+      ctx.stroke();
+
+      // Heart particles floating up
+      const heartPhase = (t * 2 + cow.id.charCodeAt(1)) % 3;
+      if (heartPhase < 1) {
+        const heartY = drawY - 18 - heartPhase * 15;
+        const heartX = screenX + Math.sin(t * 3) * 5;
+        ctx.fillStyle = `rgba(255, 100, 120, ${1 - heartPhase})`;
+        ctx.font = "10px sans-serif";
+        ctx.fillText("♥", heartX - 4, heartY);
+      }
+
+      // Sparkles around happy cow
+      ctx.fillStyle = "rgba(255, 255, 100, 0.8)";
+      for (let i = 0; i < 3; i++) {
+        const angle = t * 2 + (i * Math.PI * 2) / 3;
+        const dist = 14 + Math.sin(t * 4 + i) * 3;
+        const sx = screenX + Math.cos(angle) * dist;
+        const sy = drawY - 4 + Math.sin(angle) * dist * 0.6;
+        const size = 2 + Math.sin(t * 6 + i) * 1;
+        ctx.beginPath();
+        ctx.arc(sx, sy, size, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
   });
 
   // Draw other players
