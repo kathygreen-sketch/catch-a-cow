@@ -28,6 +28,9 @@ const touchControls = document.getElementById("touchControls");
 const startModal = document.getElementById("startModal");
 const farmNameInput = document.getElementById("farmNameInput");
 const startBtn = document.getElementById("startBtn");
+const chatContainer = document.getElementById("chatContainer");
+const chatInput = document.getElementById("chatInput");
+const chatSendBtn = document.getElementById("chatSendBtn");
 
 const WORLD_SIZE = 2000;
 const VIEW_PADDING = 80;
@@ -83,6 +86,10 @@ const state = {
   touchDirs: new Set(),
   audio: { ctx: null, unlocked: false },
   log: [],
+  pendingRaid: null, // { raidId, attackerName, puzzle, timeLimit, start }
+  raidingFarm: null, // farmId we're currently raiding
+  otherPlayers: [], // { id, name, x, y }
+  chatMessages: [], // { senderId, senderName, text, x, y, time }
 };
 
 const HINT_TOKEN_COST = 12;
@@ -169,10 +176,53 @@ function handleServerMessage(message) {
       state.selfFarm = { ...self, size: 160 };
       state.captured = self.cowsList.map((cowId) => message.cows.find((cow) => cow.id === cowId)).filter(Boolean);
     }
+    state.otherPlayers = (message.players || []).filter((p) => p.id !== state.playerId);
     state.weather = message.weather;
     state.dayTime = message.dayTime;
     state.lastServerSync = performance.now();
     updateFarmStats();
+    return;
+  }
+  if (message.type === "chat") {
+    state.chatMessages.push({
+      senderId: message.senderId,
+      senderName: message.senderName,
+      text: message.text,
+      x: message.x,
+      y: message.y,
+      time: performance.now(),
+    });
+    // Keep only last 20 messages
+    if (state.chatMessages.length > 20) {
+      state.chatMessages.shift();
+    }
+    return;
+  }
+  if (message.type === "raidIncoming") {
+    // Someone is raiding us - show defense puzzle
+    state.pendingRaid = {
+      raidId: message.raidId,
+      attackerName: message.attackerName,
+      puzzle: message.puzzle,
+      timeLimit: message.timeLimit,
+      start: performance.now(),
+    };
+    showDefensePuzzle(message.puzzle, message.raidId, message.timeLimit);
+    return;
+  }
+  if (message.type === "raidStarted") {
+    state.raidingFarm = message.targetName;
+    return;
+  }
+  if (message.type === "raidResult") {
+    state.raidingFarm = null;
+    state.pendingRaid = null;
+    state.puzzle = null;
+    renderPuzzle();
+    return;
+  }
+  if (message.type === "error") {
+    logEvent(message.message, "negative");
     return;
   }
   if (message.type === "event") {
@@ -675,6 +725,67 @@ function generateLockPuzzle() {
   };
 }
 
+function showDefensePuzzle(puzzle, raidId, timeLimit) {
+  state.puzzle = {
+    question: puzzle.question,
+    hint: puzzle.hint,
+    answer: null, // We don't know the answer, server validates
+    raidId: raidId,
+    onSuccess: () => {},
+    onFail: () => {},
+    timeLimitMs: timeLimit,
+    start: performance.now(),
+    isDefense: true,
+  };
+  renderDefensePuzzle(puzzle, raidId, timeLimit);
+}
+
+function renderDefensePuzzle(puzzle, raidId, timeLimit) {
+  puzzleBox.innerHTML = "";
+
+  const warning = document.createElement("div");
+  warning.style.color = "#c44";
+  warning.style.fontWeight = "bold";
+  warning.textContent = "RAID INCOMING! Solve to defend!";
+  puzzleBox.appendChild(warning);
+
+  const question = document.createElement("div");
+  question.textContent = puzzle.question;
+  question.style.marginTop = "8px";
+  puzzleBox.appendChild(question);
+
+  const input = document.createElement("input");
+  input.type = "text";
+  input.placeholder = "Enter answer";
+  puzzleBox.appendChild(input);
+
+  const button = document.createElement("button");
+  button.className = "action";
+  button.textContent = "Defend!";
+  puzzleBox.appendChild(button);
+
+  const timer = document.createElement("div");
+  timer.style.marginTop = "8px";
+  timer.style.fontSize = "12px";
+  timer.style.color = "#c44";
+  timer.textContent = `Time: ${Math.ceil(timeLimit / 1000)}s`;
+  puzzleBox.appendChild(timer);
+
+  button.addEventListener("click", () => {
+    const value = parseFloat(input.value.trim());
+    if (Number.isNaN(value)) {
+      logEvent("Answer not recognized. Try again.");
+      return;
+    }
+    sendToServer({ type: "defend", raidId, answer: value });
+    state.puzzle = null;
+    state.pendingRaid = null;
+    renderPuzzle();
+  });
+
+  input.focus();
+}
+
 function generateDefensePuzzle() {
   const grade = getGradeLevel(state.fenceStrength + 4);
   if (grade <= 6) {
@@ -729,6 +840,10 @@ function upgradeFence() {
     state.fenceHeight += 1;
     state.selfFarm.size = Math.min(240, 160 + state.fenceHeight * 6);
     updateFarmStats();
+    // Sync with server
+    if (state.online) {
+      sendToServer({ type: "upgradeFence", fenceStrength: state.fenceStrength });
+    }
   }, () => {});
 }
 
@@ -742,6 +857,10 @@ function upgradeLocks() {
   state.lockStrength += 1;
   updateFarmStats();
   logEvent("Locks upgraded. Fence security improved.", "positive");
+  // Sync with server
+  if (state.online) {
+    sendToServer({ type: "upgradeLock", lockLevel: state.lockLevel });
+  }
 }
 
 function buyHintTokens() {
@@ -822,6 +941,28 @@ function drawWorld() {
     ctx.fillRect(screenX + 5, screenY - 2, 4, 4);
   });
 
+  // Draw other players
+  state.otherPlayers.forEach((player) => {
+    const px = player.x - camX;
+    const py = player.y - camY;
+    if (px < -VIEW_PADDING || px > viewW + VIEW_PADDING) return;
+    if (py < -VIEW_PADDING || py > viewH + VIEW_PADDING) return;
+
+    // Player body (different color from local player)
+    ctx.fillStyle = "#4a6b8a";
+    ctx.fillRect(px - 8, py - 8, 16, 16);
+    // Player hat
+    ctx.fillStyle = "#7eb5e0";
+    ctx.fillRect(px - 5, py - 13, 10, 5);
+    // Player name
+    ctx.fillStyle = "#2f2b23";
+    ctx.font = "9px Rockwell, Palatino, Georgia, serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "bottom";
+    ctx.fillText(player.name, px, py - 16);
+  });
+
+  // Draw local player
   const playerX = state.player.x - camX;
   const playerY = state.player.y - camY;
   ctx.fillStyle = "#2f2b23";
@@ -829,10 +970,79 @@ function drawWorld() {
   ctx.fillStyle = "#f0b562";
   ctx.fillRect(playerX - 5, playerY - 13, 10, 5);
 
+  // Draw chat bubbles
+  drawChatBubbles(camX, camY);
+
   ctx.restore();
   drawEnvironmentOverlay(viewW, viewH);
   drawMiniMap();
   renderHoverTooltip();
+}
+
+function drawChatBubbles(camX, camY) {
+  const now = performance.now();
+  const BUBBLE_DURATION = 5000; // 5 seconds
+
+  // Remove old messages
+  state.chatMessages = state.chatMessages.filter((msg) => now - msg.time < BUBBLE_DURATION);
+
+  state.chatMessages.forEach((msg) => {
+    // Find player position for this message
+    let px, py;
+    if (msg.senderId === state.playerId) {
+      px = state.player.x;
+      py = state.player.y;
+    } else {
+      const player = state.otherPlayers.find((p) => p.id === msg.senderId);
+      if (!player) return;
+      px = player.x;
+      py = player.y;
+    }
+
+    const screenX = px - camX;
+    const screenY = py - camY;
+
+    // Calculate opacity (fade out in last second)
+    const age = now - msg.time;
+    const opacity = age > BUBBLE_DURATION - 1000 ? (BUBBLE_DURATION - age) / 1000 : 1;
+
+    // Draw bubble
+    ctx.save();
+    ctx.globalAlpha = opacity;
+
+    const text = msg.text.length > 30 ? msg.text.substring(0, 27) + "..." : msg.text;
+    ctx.font = "10px Rockwell, Palatino, Georgia, serif";
+    const textWidth = ctx.measureText(text).width;
+    const bubbleWidth = textWidth + 12;
+    const bubbleHeight = 18;
+    const bubbleX = screenX - bubbleWidth / 2;
+    const bubbleY = screenY - 35;
+
+    // Bubble background
+    ctx.fillStyle = "rgba(255, 255, 255, 0.95)";
+    ctx.beginPath();
+    ctx.roundRect(bubbleX, bubbleY, bubbleWidth, bubbleHeight, 4);
+    ctx.fill();
+    ctx.strokeStyle = "#7f5c36";
+    ctx.lineWidth = 1;
+    ctx.stroke();
+
+    // Bubble pointer
+    ctx.fillStyle = "rgba(255, 255, 255, 0.95)";
+    ctx.beginPath();
+    ctx.moveTo(screenX - 4, bubbleY + bubbleHeight);
+    ctx.lineTo(screenX, bubbleY + bubbleHeight + 5);
+    ctx.lineTo(screenX + 4, bubbleY + bubbleHeight);
+    ctx.fill();
+
+    // Text
+    ctx.fillStyle = "#2f2b23";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(text, screenX, bubbleY + bubbleHeight / 2);
+
+    ctx.restore();
+  });
 }
 
 function drawEnvironmentOverlay(viewW, viewH) {
@@ -906,17 +1116,27 @@ function drawFarm(camX, camY, farm) {
   ctx.fillStyle = "#6b3f1d";
   ctx.fillRect(screenX + farmSize / 2 - 10, screenY + farmSize / 2 - 10, 20, 20);
 
-  if (farm.isPlayer && state.lockLevel > 0) {
-    const lockX = screenX + farmSize / 2 + 10;
-    const lockY = screenY + farmSize / 2 - 6;
-    ctx.fillStyle = "#d3a84f";
-    ctx.fillRect(lockX, lockY, 8, 10);
-    ctx.strokeStyle = "#8b6a2b";
-    ctx.lineWidth = 2;
-    ctx.strokeRect(lockX, lockY, 8, 10);
-    ctx.beginPath();
-    ctx.arc(lockX + 4, lockY - 2, 4, Math.PI, 0);
-    ctx.stroke();
+  // Draw locks at corners based on lock level
+  const locksToDraw = farm.isPlayer ? state.lockLevel : 0;
+  if (locksToDraw > 0) {
+    const lockPositions = [
+      { x: screenX - 4, y: screenY - 4 },               // top-left
+      { x: screenX + farmSize - 4, y: screenY - 4 },    // top-right
+      { x: screenX - 4, y: screenY + farmSize - 6 },    // bottom-left
+      { x: screenX + farmSize - 4, y: screenY + farmSize - 6 }, // bottom-right
+    ];
+
+    for (let i = 0; i < Math.min(locksToDraw, 4); i++) {
+      const pos = lockPositions[i];
+      ctx.fillStyle = "#d3a84f";
+      ctx.fillRect(pos.x, pos.y, 8, 10);
+      ctx.strokeStyle = "#8b6a2b";
+      ctx.lineWidth = 2;
+      ctx.strokeRect(pos.x, pos.y, 8, 10);
+      ctx.beginPath();
+      ctx.arc(pos.x + 4, pos.y - 2, 4, Math.PI, 0);
+      ctx.stroke();
+    }
   }
 
   renderFarmCows(screenX, screenY, farmSize, farm.isPlayer ? state.captured.length : farm.cows);
@@ -1006,6 +1226,12 @@ function renderHoverTooltip() {
   const title = hovered.isPlayer ? `${hovered.name} (You)` : hovered.name;
   const lines = [title, ...preview];
 
+  // Show raid hint during night if not player's farm
+  const canRaid = state.online && state.dayTime === "night" && !hovered.isPlayer && hovered.cowsList.length > 0;
+  if (canRaid) {
+    lines.push("[Click to raid]");
+  }
+
   const width = 140;
   const height = 16 * lines.length + 10;
 
@@ -1020,7 +1246,11 @@ function renderHoverTooltip() {
   ctx.textAlign = "left";
   ctx.textBaseline = "top";
   lines.forEach((line, index) => {
+    if (line === "[Click to raid]") {
+      ctx.fillStyle = "#c44";
+    }
     ctx.fillText(line, plateX + 6, plateY + 6 + index * 14);
+    ctx.fillStyle = "#2f2b23";
   });
 
   ctx.restore();
@@ -1193,7 +1423,15 @@ function handlePuzzleTimer() {
 }
 
 function handleKeyDown(event) {
+  // Don't handle keys if chat is open
+  if (chatOpen) return;
+
   switch (event.key) {
+    case "Enter":
+      if (state.online) {
+        toggleChat();
+      }
+      break;
     case "w":
     case "W":
     case "ArrowUp":
@@ -1294,6 +1532,35 @@ upgradeFenceBtn.addEventListener("click", upgradeFence);
 upgradeLockBtn.addEventListener("click", upgradeLocks);
 buyHintsBtn.addEventListener("click", buyHintTokens);
 
+// Chat functionality
+let chatOpen = false;
+
+function toggleChat() {
+  chatOpen = !chatOpen;
+  chatContainer.style.display = chatOpen ? "flex" : "none";
+  if (chatOpen) {
+    chatInput.focus();
+  }
+}
+
+function sendChat() {
+  const text = chatInput.value.trim();
+  if (!text || !state.online) return;
+  sendToServer({ type: "chat", text });
+  chatInput.value = "";
+  toggleChat();
+}
+
+chatSendBtn.addEventListener("click", sendChat);
+chatInput.addEventListener("keydown", (event) => {
+  if (event.key === "Enter") {
+    sendChat();
+  } else if (event.key === "Escape") {
+    toggleChat();
+  }
+  event.stopPropagation();
+});
+
 startBtn.addEventListener("click", () => {
   initAudio();
   const name = farmNameInput.value.trim() || "Meadowlight";
@@ -1337,6 +1604,20 @@ canvas.addEventListener("click", () => {
     state.lockedFarmName = null;
     return;
   }
+
+  // Check if we can raid this farm
+  const canRaid = state.online && state.dayTime === "night" && !hovered.isPlayer && hovered.cowsList.length > 0;
+  if (canRaid && state.lockedFarmName === hovered.name) {
+    // Second click on same farm during night = initiate raid
+    const targetFarm = state.farms.find((f) => f.name === hovered.name);
+    if (targetFarm) {
+      sendToServer({ type: "raid", targetFarmId: targetFarm.id });
+      logEvent(`Initiating raid on ${hovered.name}...`, "neutral");
+      state.lockedFarmName = null;
+    }
+    return;
+  }
+
   if (state.lockedFarmName === hovered.name) {
     state.lockedFarmName = null;
   } else {

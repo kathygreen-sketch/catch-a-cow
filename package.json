@@ -1,13 +1,15 @@
 {
-  "name": "vibe-coding",
+  "name": "catch-a-cow",
   "version": "1.0.0",
-  "description": "",
-  "main": "app.js",
+  "description": "Multiplayer farming game with math puzzles",
+  "main": "server.js",
   "scripts": {
-    "start": "node server.js",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "start": "node server.js"
   },
-  "keywords": [],
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "keywords": ["game", "multiplayer", "math"],
   "author": "",
   "license": "ISC",
   "type": "commonjs",

@@ -58,6 +58,7 @@ const state = {
   cycleStart: Date.now(),
   lastCycleIndex: -1,
   nextFarmIndex: 0,
+  activeRaids: new Map(), // raidId -> { attackerId, defenderId, startTime, puzzleAnswer }
 };
 
 const npcFarms = [
@@ -259,6 +260,198 @@ function handleCapture(player, cowId, toolPower) {
   }
 }
 
+function generateRaidPuzzle() {
+  const a = 2 + Math.floor(Math.random() * 5);
+  const x = 3 + Math.floor(Math.random() * 8);
+  const b = 2 + Math.floor(Math.random() * 6);
+  const c = a * x + b;
+  return {
+    question: `Defense puzzle: Solve ${a}x + ${b} = ${c}. What is x?`,
+    answer: x,
+    hint: "Subtract the constant, then divide by the coefficient.",
+  };
+}
+
+function handleRaid(attacker, targetFarmId) {
+  if (state.dayTime !== "night") {
+    send(attacker.ws, { type: "event", message: "Raids can only happen at night." });
+    return;
+  }
+
+  const targetFarm = getFarmById(targetFarmId);
+  if (!targetFarm) {
+    send(attacker.ws, { type: "event", message: "Target farm not found." });
+    return;
+  }
+
+  if (targetFarm.id === attacker.id) {
+    send(attacker.ws, { type: "event", message: "You cannot raid your own farm." });
+    return;
+  }
+
+  if (targetFarm.cowsList.length === 0) {
+    send(attacker.ws, { type: "event", message: `${targetFarm.name} has no cows to steal.` });
+    return;
+  }
+
+  // Check if target is already being raided
+  for (const raid of state.activeRaids.values()) {
+    if (raid.defenderId === targetFarmId) {
+      send(attacker.ws, { type: "event", message: `${targetFarm.name} is already being raided.` });
+      return;
+    }
+  }
+
+  const raidId = `raid-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+  const puzzle = generateRaidPuzzle();
+
+  state.activeRaids.set(raidId, {
+    attackerId: attacker.id,
+    attackerName: attacker.name,
+    defenderId: targetFarmId,
+    defenderName: targetFarm.name,
+    startTime: Date.now(),
+    puzzleAnswer: puzzle.answer,
+    resolved: false,
+  });
+
+  // Notify attacker
+  send(attacker.ws, { type: "event", message: `Raiding ${targetFarm.name}! Waiting for their defense...` });
+  send(attacker.ws, { type: "raidStarted", raidId, targetName: targetFarm.name });
+
+  // Notify defender (if online player)
+  const defender = state.players.get(targetFarmId);
+  if (defender) {
+    send(defender.ws, {
+      type: "raidIncoming",
+      raidId,
+      attackerName: attacker.name,
+      puzzle: { question: puzzle.question, hint: puzzle.hint },
+      timeLimit: 15000,
+    });
+    send(defender.ws, { type: "event", message: `${attacker.name} is raiding your farm! Solve the puzzle to defend!` });
+  } else {
+    // NPC farm - auto-resolve after short delay with random success
+    setTimeout(() => resolveRaid(raidId, Math.random() > 0.5), 2000);
+  }
+
+  // Set timeout for player defense
+  setTimeout(() => {
+    const raid = state.activeRaids.get(raidId);
+    if (raid && !raid.resolved) {
+      resolveRaid(raidId, false);
+    }
+  }, 16000);
+}
+
+function handleDefense(defender, raidId, answer) {
+  const raid = state.activeRaids.get(raidId);
+  if (!raid || raid.resolved) return;
+  if (raid.defenderId !== defender.id) return;
+
+  const isCorrect = Math.abs(answer - raid.puzzleAnswer) < 0.01;
+  resolveRaid(raidId, isCorrect);
+}
+
+const CHAT_DISTANCE = 200; // Players within this range can see chat
+
+function handleChat(sender, text) {
+  if (!text || text.length === 0 || text.length > 100) return;
+
+  const chatMessage = {
+    type: "chat",
+    senderId: sender.id,
+    senderName: sender.name,
+    text: text.trim(),
+    x: sender.x,
+    y: sender.y,
+  };
+
+  // Send to all players within chat distance
+  state.players.forEach((player) => {
+    const dx = player.x - sender.x;
+    const dy = player.y - sender.y;
+    const dist = Math.hypot(dx, dy);
+    if (dist <= CHAT_DISTANCE || player.id === sender.id) {
+      send(player.ws, chatMessage);
+    }
+  });
+}
+
+function resolveRaid(raidId, defenseSuccess) {
+  const raid = state.activeRaids.get(raidId);
+  if (!raid || raid.resolved) return;
+
+  raid.resolved = true;
+  state.activeRaids.delete(raidId);
+
+  const attacker = state.players.get(raid.attackerId);
+  const defender = state.players.get(raid.defenderId);
+  const attackerFarm = getFarmById(raid.attackerId);
+  const defenderFarm = getFarmById(raid.defenderId);
+
+  if (defenseSuccess) {
+    // Defense succeeded
+    if (attacker) {
+      send(attacker.ws, { type: "raidResult", success: false, message: `${raid.defenderName} defended successfully!` });
+      send(attacker.ws, { type: "event", message: `${raid.defenderName} defended against your raid.` });
+    }
+    if (defender) {
+      send(defender.ws, { type: "raidResult", success: true, message: "You defended your farm!" });
+      send(defender.ws, { type: "event", message: "You successfully defended your farm!" });
+    }
+    broadcast({ type: "event", message: `${raid.defenderName} defended against ${raid.attackerName}'s raid.` });
+  } else {
+    // Raid succeeded - try to transfer a cow
+    if (defenderFarm && defenderFarm.cowsList.length > 0) {
+      // Calculate defense strength from fence + locks
+      const defenseStrength = (defenderFarm.fenceStrength || 1) + (defenderFarm.lockLevel || 0);
+
+      // Find a cow that can be stolen (difficulty <= defenseStrength can't escape)
+      const stealableCows = defenderFarm.cowsList
+        .map((cowId) => state.cows.find((c) => c.id === cowId))
+        .filter((cow) => cow && cow.difficulty > defenseStrength);
+
+      if (stealableCows.length === 0) {
+        // All cows protected by strong fence
+        if (attacker) {
+          send(attacker.ws, { type: "raidResult", success: false, message: `${raid.defenderName}'s fence is too strong! No cows could escape.` });
+          send(attacker.ws, { type: "event", message: `${raid.defenderName}'s strong fence protected all cows.` });
+        }
+        if (defender) {
+          send(defender.ws, { type: "raidResult", success: true, message: "Your strong fence protected your cows!" });
+          send(defender.ws, { type: "event", message: "Your fence protected your cows from the raid!" });
+        }
+        return;
+      }
+
+      // Steal the easiest cow that can escape (lowest difficulty above threshold)
+      const stolenCow = stealableCows.sort((a, b) => a.difficulty - b.difficulty)[0];
+      const stolenCowId = stolenCow.id;
+
+      // Remove from defender
+      defenderFarm.cowsList = defenderFarm.cowsList.filter((id) => id !== stolenCowId);
+
+      if (attackerFarm) {
+        attackerFarm.cowsList.push(stolenCowId);
+        stolenCow.owner = raid.attackerId;
+      }
+
+      const cowName = stolenCow.name;
+
+      if (attacker) {
+        send(attacker.ws, { type: "raidResult", success: true, message: `You stole ${cowName} from ${raid.defenderName}!` });
+        send(attacker.ws, { type: "event", message: `You stole ${cowName} from ${raid.defenderName}!` });
+      }
+      if (defender) {
+        send(defender.ws, { type: "raidResult", success: false, message: `${raid.attackerName} stole ${cowName}!` });
+        send(defender.ws, { type: "event", message: `${raid.attackerName} stole ${cowName} from your farm!` });
+      }
+      broadcast({ type: "event", message: `${raid.attackerName} stole ${cowName} from ${raid.defenderName}!` });
+    }
+  }
+}
+
 function snapshot() {
   return {
     type: "state",
@@ -283,6 +476,12 @@ function snapshot() {
       x: farm.x,
       y: farm.y,
       cowsList: farm.cowsList,
+    })),
+    players: Array.from(state.players.values()).map((player) => ({
+      id: player.id,
+      name: player.name,
+      x: player.x,
+      y: player.y,
     })),
     weather: state.weather,
     dayTime: state.dayTime,
@@ -316,7 +515,17 @@ const server = http.createServer((req, res) => {
 
 const wss = new WebSocket.Server({ server });
 
-  wss.on("connection", (ws) => {
+const MAX_FARMS = 5; // 4 NPCs + 1 player slot
+
+wss.on("connection", (ws) => {
+  // Check if server is full
+  const playerFarmCount = state.farms.filter((f) => !f.id.startsWith("npc-")).length;
+  if (playerFarmCount >= MAX_FARMS - npcFarms.length) {
+    ws.send(JSON.stringify({ type: "error", message: "Server is full (max 5 farms). Try again later." }));
+    ws.close();
+    return;
+  }
+
   const playerId = `player-${Math.floor(Math.random() * 1e9)}`;
   const farmPos = getNextFarmPosition();
   const playerFarm = {
@@ -325,6 +534,8 @@ const wss = new WebSocket.Server({ server });
     x: farmPos.x,
     y: farmPos.y,
     cowsList: [],
+    fenceStrength: 1,
+    lockLevel: 0,
   };
   state.farms.push(playerFarm);
 
@@ -356,6 +567,31 @@ const wss = new WebSocket.Server({ server });
     if (message.type === "capture") {
       player.toolType = message.toolType;
       handleCapture(player, message.cowId, message.toolPower || 0);
+      return;
+    }
+
+    if (message.type === "raid") {
+      handleRaid(player, message.targetFarmId);
+      return;
+    }
+
+    if (message.type === "defend") {
+      handleDefense(player, message.raidId, message.answer);
+      return;
+    }
+
+    if (message.type === "chat") {
+      handleChat(player, message.text);
+      return;
+    }
+
+    if (message.type === "upgradeFence") {
+      playerFarm.fenceStrength = message.fenceStrength || playerFarm.fenceStrength;
+      return;
+    }
+
+    if (message.type === "upgradeLock") {
+      playerFarm.lockLevel = message.lockLevel || playerFarm.lockLevel;
       return;
     }
   });
