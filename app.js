@@ -6,17 +6,14 @@ const miniCtx = minimap.getContext("2d");
 const farmNameValue = document.getElementById("farmNameValue");
 const cowCount = document.getElementById("cowCount");
 const fenceStrengthEl = document.getElementById("fenceStrength");
-const fenceHeightEl = document.getElementById("fenceHeight");
 const creditsEl = document.getElementById("credits");
 const lockLevelEl = document.getElementById("lockLevel");
-const hintTokensEl = document.getElementById("hintTokens");
 const cowProfile = document.getElementById("cowProfile");
 const ropeBtn = document.getElementById("ropeBtn");
 const netBtn = document.getElementById("netBtn");
 const puzzleBox = document.getElementById("puzzleBox");
 const upgradeFenceBtn = document.getElementById("upgradeFenceBtn");
 const upgradeLockBtn = document.getElementById("upgradeLockBtn");
-const buyHintsBtn = document.getElementById("buyHintsBtn");
 const leaderboard = document.getElementById("leaderboard");
 const logFeed = document.getElementById("logFeed");
 const timeOfDayEl = document.getElementById("timeOfDay");
@@ -45,13 +42,6 @@ const WEATHER_LABELS = {
   fog: "Fog",
 };
 
-const npcFarms = [
-  { name: "Bramblegate", cows: 0, cowsList: [] },
-  { name: "Riverbend", cows: 0, cowsList: [] },
-  { name: "Copperfield", cows: 0, cowsList: [] },
-  { name: "Moonridge", cows: 0, cowsList: [] },
-];
-
 const state = {
   farmName: "",
   player: { x: WORLD_SIZE / 2, y: WORLD_SIZE / 2, vx: 0, vy: 0 },
@@ -62,7 +52,6 @@ const state = {
   credits: 0,
   lockLevel: 0,
   lockStrength: 0,
-  hintTokens: 0,
   weather: WEATHER_TYPES[0],
   dayTime: "day",
   cycleStart: performance.now(),
@@ -92,8 +81,6 @@ const state = {
   otherPlayers: [], // { id, name, x, y }
   chatMessages: [], // { senderId, senderName, text, x, y, time }
 };
-
-const HINT_TOKEN_COST = 12;
 
 function computeAllowedTool(cow) {
   if (cow.temperament === "skittish" || cow.temperament === "curious") return "net";
@@ -300,27 +287,14 @@ function initCows() {
 
 function initFarms() {
   state.selfFarm = { x: WORLD_SIZE / 2, y: WORLD_SIZE / 2, size: 160 };
-  const centerX = WORLD_SIZE / 2;
-  const centerY = WORLD_SIZE / 2;
-  const radius = 520;
-  state.farms = npcFarms.map((farm, index) => {
-    const angle = (Math.PI * 2 * index) / npcFarms.length + 0.6;
-    return {
-      ...farm,
-      x: centerX + Math.cos(angle) * radius,
-      y: centerY + Math.sin(angle) * radius,
-      strength: 2 + index,
-      size: 160,
-      cowsList: farm.cowsList,
-    };
-  });
+  state.farms = [];
 }
 
 function updateLeaderboard() {
-  syncNpcFarmData();
-  const otherFarms = state.online
-    ? state.farms.map((farm) => ({ name: farm.name, cows: farm.cowsList.length }))
-    : npcFarms;
+  const otherFarms = state.farms.map((farm) => ({
+    name: farm.name,
+    cows: farm.cowsList.length,
+  }));
   const entries = [
     { name: state.farmName || "My Farm", cows: state.captured.length },
     ...otherFarms,
@@ -338,28 +312,14 @@ function updateLeaderboard() {
   });
 }
 
-function syncNpcFarmData() {
-  if (state.online) return;
-  state.farms.forEach((farm) => {
-    const npc = npcFarms.find((item) => item.name === farm.name);
-    if (npc) {
-      farm.cows = npc.cows;
-      farm.cowsList = npc.cowsList;
-    }
-  });
-}
-
 function updateFarmStats() {
   farmNameValue.textContent = state.farmName;
   cowCount.textContent = state.captured.length;
   state.credits = state.captured.length * 5;
   fenceStrengthEl.textContent = state.fenceStrength + state.lockStrength;
-  fenceHeightEl.textContent = state.fenceHeight;
   creditsEl.textContent = state.credits;
   lockLevelEl.textContent = state.lockLevel;
-  hintTokensEl.textContent = state.hintTokens;
   upgradeLockBtn.textContent = `Buy Lock (${getLockCost()} credits)`;
-  buyHintsBtn.textContent = `Buy Hint Token (${HINT_TOKEN_COST} credits)`;
   updateLeaderboard();
 }
 
@@ -393,28 +353,11 @@ function updateCycle() {
   if (cycleIndex !== state.cycleIndex) {
     state.cycleIndex = cycleIndex;
     setWeather(WEATHER_TYPES[Math.floor(Math.random() * WEATHER_TYPES.length)]);
-    simulateNpcCapture();
   }
 
   if (isNight && state.raidCheckedCycle !== cycleIndex) {
     state.raidCheckedCycle = cycleIndex;
     triggerRaidCheck();
-  }
-}
-
-function simulateNpcCapture() {
-  if (state.online) return;
-  const wildCows = state.cows.filter((cow) => cow.status === "wild");
-  if (wildCows.length === 0) return;
-  if (Math.random() < 0.35) {
-    const cow = wildCows[Math.floor(Math.random() * wildCows.length)];
-    cow.status = "captured";
-    const npc = npcFarms[Math.floor(Math.random() * npcFarms.length)];
-    npc.cows += 1;
-    npc.cowsList.push(cow);
-    cow.owner = npc.name;
-    logEvent(`${npc.name} caught ${cow.name}.`, "positive");
-    updateLeaderboard();
   }
 }
 
@@ -445,11 +388,8 @@ function handleRaidLoss() {
     return;
   }
   const stolen = state.captured.pop();
-  const npc = npcFarms[Math.floor(Math.random() * npcFarms.length)];
-  npc.cows += 1;
-  npc.cowsList.push(stolen);
-  stolen.owner = npc.name;
-  logEvent(`${npc.name} stole ${stolen.name} at night.`, "negative");
+  stolen.owner = null;
+  logEvent(`${stolen.name} was stolen in the night.`, "negative");
   updateFarmStats();
 }
 
@@ -533,8 +473,8 @@ function renderPuzzle() {
 
   const hintBtn = document.createElement("button");
   hintBtn.className = "action";
-  hintBtn.textContent = "Use Hint Token (1)";
-  hintBtn.disabled = state.hintTokens === 0 || !puzzle.hint;
+  hintBtn.textContent = "Show Hint";
+  hintBtn.disabled = !puzzle.hint;
   puzzleBox.appendChild(hintBtn);
 
   const button = document.createElement("button");
@@ -553,17 +493,8 @@ function renderPuzzle() {
   }
   puzzleBox.appendChild(hint);
 
-  const hintCost = document.createElement("div");
-  hintCost.style.marginTop = "6px";
-  hintCost.style.fontSize = "12px";
-  hintCost.style.opacity = "0.6";
-  hintCost.textContent = "Hint cost: 1 token";
-  puzzleBox.appendChild(hintCost);
-
   hintBtn.addEventListener("click", () => {
-    if (state.hintTokens <= 0 || !puzzle.hint) return;
-    state.hintTokens -= 1;
-    updateFarmStats();
+    if (!puzzle.hint) return;
     hintReveal.style.display = "block";
     hintBtn.disabled = true;
   });
@@ -862,17 +793,6 @@ function upgradeLocks() {
   if (state.online) {
     sendToServer({ type: "upgradeLock", lockLevel: state.lockLevel });
   }
-}
-
-function buyHintTokens() {
-  const cost = HINT_TOKEN_COST;
-  if (state.credits < cost) {
-    logEvent(`Not enough credits. Need ${cost} credits for a hint token.`);
-    return;
-  }
-  state.hintTokens += 1;
-  updateFarmStats();
-  logEvent("Bought a hint token.", "positive");
 }
 
 function drawWorld() {
@@ -1740,7 +1660,6 @@ netBtn.addEventListener("click", () => {
 
 upgradeFenceBtn.addEventListener("click", upgradeFence);
 upgradeLockBtn.addEventListener("click", upgradeLocks);
-buyHintsBtn.addEventListener("click", buyHintTokens);
 
 dissolveFarmBtn.addEventListener("click", () => {
   if (!state.online) {
