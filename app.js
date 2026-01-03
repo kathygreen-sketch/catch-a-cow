@@ -571,7 +571,7 @@ function generateCapturePuzzle(cow, toolType) {
     const diff = x - y;
     return {
       question: `Grade 8 (Difficulty ${cow.difficulty}): Solve the system: x + y = ${sum}, x - y = ${diff}. What is x?`,
-      answer: x,
+      answer: (sum + diff) / 2,
       hint: "Add the two equations to eliminate y.",
     };
   }
@@ -643,7 +643,7 @@ function generateLockPuzzle() {
   if (grade <= 6) {
     const base = 8 + state.lockLevel * 2;
     const percent = 10 + state.lockLevel * 5;
-    const result = Math.round(base * (1 + percent / 100));
+    const result = parseFloat((base * (1 + percent / 100)).toFixed(1));
     return {
       question: `Locks: strength ${base} increased by ${percent}%. What is the new strength?`,
       answer: result,
