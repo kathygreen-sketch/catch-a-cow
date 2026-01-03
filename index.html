@@ -14,7 +14,17 @@
       <header class="topbar">
         <div class="title">
           <div class="logo">
-            <img class="logo-icon" src="cow icon.png" alt="Cow icon" />
+            <svg class="logo-icon" viewBox="0 0 34 34" role="img" aria-label="Cow icon">
+              <rect x="1" y="1" width="32" height="32" rx="8" fill="#f5efe3" />
+              <circle cx="17" cy="18" r="11" fill="#f7d36a" opacity="0.5" />
+              <rect x="9" y="14" width="16" height="12" rx="2" fill="#8a5c3d" />
+              <rect x="12" y="10" width="10" height="4" rx="1" fill="#f2e6c9" />
+              <rect x="10" y="18" width="3" height="3" fill="#3a2b1a" />
+              <rect x="21" y="18" width="3" height="3" fill="#3a2b1a" />
+              <rect x="10" y="24" width="4" height="3" fill="#3a2b1a" />
+              <rect x="20" y="24" width="4" height="3" fill="#3a2b1a" />
+              <rect x="13" y="9" width="8" height="2" rx="1" fill="#e8dfd0" />
+            </svg>
             <span>Catch a Cow</span>
           </div>
           <div class="subtitle">99 cows. Math wins the grassland.</div>
@@ -71,7 +81,7 @@
             </div>
           </div>
           <div class="hud">
-            <div class="hint">Move: WASD or Arrow Keys | Scan: auto when close | Enter: Chat</div>
+          <div class="hint">Move: WASD or Arrow Keys | Scan: auto when close | Enter: Chat (nearby only)</div>
           </div>
           <div class="chat-input-container" id="chatContainer" style="display: none;">
             <input type="text" id="chatInput" maxlength="100" placeholder="Type a message..." />
@@ -106,6 +116,10 @@
         <h2>Start Your Farm</h2>
         <p>Name your farm and claim a plot on the grassland.</p>
         <input id="farmNameInput" type="text" maxlength="20" placeholder="e.g., Meadowlight Farm" />
+        <div class="color-row">
+          <label for="farmColorInput">Choose your avatar color</label>
+          <input id="farmColorInput" type="color" value="#2f2b23" />
+        </div>
         <button id="startBtn" class="action">Start Game</button>
         <div class="note">99 cows exist in the world. Catch the most to be richest in town.</div>
       </div>

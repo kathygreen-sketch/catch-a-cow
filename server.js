@@ -44,6 +44,7 @@ function initCows() {
     vy: rand(-0.8, 0.8),
     status: "wild",
     owner: null,
+    bonus: false,
     visibility: 160,
     allowedTool: computeAllowedTool(cow),
   }));
@@ -60,33 +61,6 @@ const state = {
   nextFarmIndex: 0,
   activeRaids: new Map(), // raidId -> { attackerId, defenderId, startTime, puzzleAnswer }
 };
-
-const npcFarms = [
-  { id: "npc-1", name: "Bramblegate" },
-  { id: "npc-2", name: "Riverbend" },
-  { id: "npc-3", name: "Copperfield" },
-  { id: "npc-4", name: "Moonridge" },
-];
-
-function initFarms() {
-  const centerX = WORLD_SIZE / 2;
-  const centerY = WORLD_SIZE / 2;
-  const radius = 600; // Larger radius for better spacing
-  state.farms = npcFarms.map((farm, index) => {
-    const angle = (Math.PI * 2 * index) / npcFarms.length;
-    return {
-      id: farm.id,
-      name: farm.name,
-      x: centerX + Math.cos(angle) * radius,
-      y: centerY + Math.sin(angle) * radius,
-      cowsList: [],
-      fenceStrength: 2 + index, // NPCs have some defense
-      lockLevel: index,
-    };
-  });
-}
-
-initFarms();
 
 const MIN_FARM_DISTANCE = 250; // Minimum pixels between farm centers
 
@@ -165,7 +139,6 @@ function updateCycle() {
   if (cycleIndex !== state.lastCycleIndex) {
     state.lastCycleIndex = cycleIndex;
     state.weather = WEATHER_TYPES[Math.floor(Math.random() * WEATHER_TYPES.length)];
-    maybeNpcCapture();
   }
 }
 
@@ -260,19 +233,6 @@ function keepCowOutOfFarms(cow) {
   });
 }
 
-function maybeNpcCapture() {
-  if (Math.random() > 0.4) return;
-  const wild = state.cows.filter((cow) => cow.status === "wild");
-  if (wild.length === 0) return;
-  const cow = wild[Math.floor(Math.random() * wild.length)];
-  const npc = state.farms.find((farm) => farm.id.startsWith("npc-"));
-  if (!npc) return;
-  cow.status = "captured";
-  cow.owner = npc.id;
-  npc.cowsList.push(cow.id);
-  broadcast({ type: "event", message: `${npc.name} caught ${cow.name}.` });
-}
-
 function broadcast(payload) {
   const message = JSON.stringify(payload);
   state.players.forEach((player) => {
@@ -301,6 +261,7 @@ function handleCapture(player, cowId, toolPower) {
   if (toolPower + roll >= difficulty) {
     cow.status = "captured";
     cow.owner = player.id;
+    cow.bonus = cow.favoredWeather === state.weather;
     const farm = getFarmById(player.id);
     if (farm) {
       farm.cowsList.push(cow.id);
@@ -486,6 +447,7 @@ function resolveRaid(raidId, defenseSuccess) {
       if (attackerFarm) {
         attackerFarm.cowsList.push(stolenCowId);
         stolenCow.owner = raid.attackerId;
+        stolenCow.bonus = false;
       }
 
       const cowName = stolenCow.name;
@@ -518,6 +480,7 @@ function snapshot() {
       y: cow.y,
       status: cow.status,
       owner: cow.owner,
+      bonus: cow.bonus,
       visibility: cow.visibility,
       allowedTool: cow.allowedTool,
     })),
@@ -533,6 +496,7 @@ function snapshot() {
       name: player.name,
       x: player.x,
       y: player.y,
+      color: player.color || "#2f2b23",
     })),
     weather: state.weather,
     dayTime: state.dayTime,
@@ -566,12 +530,11 @@ const server = http.createServer((req, res) => {
 
 const wss = new WebSocket.Server({ server });
 
-const MAX_FARMS = 5; // 4 NPCs + 1 player slot
+const MAX_FARMS = 5; // Max real players
 
 wss.on("connection", (ws) => {
   // Check if server is full
-  const playerFarmCount = state.farms.filter((f) => !f.id.startsWith("npc-")).length;
-  if (playerFarmCount >= MAX_FARMS - npcFarms.length) {
+  if (state.farms.length >= MAX_FARMS) {
     ws.send(JSON.stringify({ type: "error", message: "Server is full (max 5 farms). Try again later." }));
     ws.close();
     return;
@@ -590,7 +553,7 @@ wss.on("connection", (ws) => {
   };
   state.farms.push(playerFarm);
 
-  const player = { id: playerId, ws, name: "New Farm", x: farmPos.x, y: farmPos.y };
+  const player = { id: playerId, ws, name: "New Farm", x: farmPos.x, y: farmPos.y, color: "#2f2b23" };
   state.players.set(playerId, player);
 
   send(ws, { type: "welcome", playerId, farm: playerFarm, spawn: farmPos });
@@ -605,7 +568,9 @@ wss.on("connection", (ws) => {
 
     if (message.type === "join") {
       player.name = message.name || "New Farm";
+      player.color = message.color || "#2f2b23";
       playerFarm.name = player.name;
+      playerFarm.color = player.color;
       return;
     }
 
@@ -653,6 +618,7 @@ wss.on("connection", (ws) => {
         if (cow) {
           cow.status = "wild";
           cow.owner = null;
+          cow.bonus = false;
           cow.x = 200 + Math.random() * (WORLD_SIZE - 400);
           cow.y = 200 + Math.random() * (WORLD_SIZE - 400);
         }
@@ -687,6 +653,7 @@ wss.on("connection", (ws) => {
         if (cow) {
           cow.status = "wild";
           cow.owner = null;
+          cow.bonus = false;
           // Move cow to random position away from farms
           cow.x = 200 + Math.random() * (WORLD_SIZE - 400);
           cow.y = 200 + Math.random() * (WORLD_SIZE - 400);

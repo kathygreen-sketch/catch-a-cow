@@ -24,6 +24,7 @@ const touchControls = document.getElementById("touchControls");
 
 const startModal = document.getElementById("startModal");
 const farmNameInput = document.getElementById("farmNameInput");
+const farmColorInput = document.getElementById("farmColorInput");
 const startBtn = document.getElementById("startBtn");
 const chatContainer = document.getElementById("chatContainer");
 const chatInput = document.getElementById("chatInput");
@@ -44,6 +45,7 @@ const WEATHER_LABELS = {
 
 const state = {
   farmName: "",
+  playerColor: "#2f2b23",
   player: { x: WORLD_SIZE / 2, y: WORLD_SIZE / 2, vx: 0, vy: 0 },
   cows: [],
   captured: [],
@@ -117,7 +119,7 @@ function connectToServer() {
   state.ws.addEventListener("open", () => {
     state.online = true;
     setConnectionStatus("Online", true);
-    sendToServer({ type: "join", name: state.farmName });
+    sendToServer({ type: "join", name: state.farmName, color: state.playerColor });
   });
 
   state.ws.addEventListener("message", (event) => {
@@ -315,7 +317,8 @@ function updateLeaderboard() {
 function updateFarmStats() {
   farmNameValue.textContent = state.farmName;
   cowCount.textContent = state.captured.length;
-  state.credits = state.captured.length * 5;
+  const bonusCount = state.captured.filter((cow) => cow.bonus).length;
+  state.credits = state.captured.length * 5 + bonusCount * 5;
   fenceStrengthEl.textContent = state.fenceStrength + state.lockStrength;
   creditsEl.textContent = state.credits;
   lockLevelEl.textContent = state.lockLevel;
@@ -389,6 +392,7 @@ function handleRaidLoss() {
   }
   const stolen = state.captured.pop();
   stolen.owner = null;
+  stolen.bonus = false;
   logEvent(`${stolen.name} was stolen in the night.`, "negative");
   updateFarmStats();
 }
@@ -757,6 +761,7 @@ function attemptCapture(cow, toolPower, toolType) {
   if (toolPower + roll >= difficulty) {
     cow.status = "captured";
     cow.owner = "player";
+    cow.bonus = cow.favoredWeather === state.weather;
     state.captured.push(cow);
     logEvent(`You caught ${cow.name}!`, "positive");
     updateFarmStats();
@@ -934,7 +939,7 @@ function drawWorld() {
     if (py < -VIEW_PADDING || py > viewH + VIEW_PADDING) return;
 
     // Player body (different color from local player)
-    ctx.fillStyle = "#4a6b8a";
+    ctx.fillStyle = player.color || "#4a6b8a";
     ctx.fillRect(px - 8, py - 8, 16, 16);
     // Player hat
     ctx.fillStyle = "#7eb5e0";
@@ -950,10 +955,15 @@ function drawWorld() {
   // Draw local player
   const playerX = state.player.x - camX;
   const playerY = state.player.y - camY;
-  ctx.fillStyle = "#2f2b23";
+  ctx.fillStyle = state.playerColor;
   ctx.fillRect(playerX - 8, playerY - 8, 16, 16);
   ctx.fillStyle = "#f0b562";
   ctx.fillRect(playerX - 5, playerY - 13, 10, 5);
+  ctx.fillStyle = "#2f2b23";
+  ctx.font = "9px Rockwell, Palatino, Georgia, serif";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "bottom";
+  ctx.fillText(state.farmName || "My Farm", playerX, playerY - 16);
 
   // Draw chat bubbles
   drawChatBubbles(camX, camY);
@@ -1711,7 +1721,9 @@ chatInput.addEventListener("keydown", (event) => {
 startBtn.addEventListener("click", () => {
   initAudio();
   const name = farmNameInput.value.trim() || "Meadowlight";
+  const color = farmColorInput ? farmColorInput.value : "#2f2b23";
   state.farmName = name;
+  state.playerColor = color;
   startModal.style.display = "none";
   connectToServer();
   setTimeout(() => {
