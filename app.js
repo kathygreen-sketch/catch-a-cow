@@ -54,6 +54,7 @@ const state = {
   seasonCows: 0,
   seasonEndsAt: 0,
   seasonId: 0,
+  lastSeasonId: 0,
   fenceStrength: 1,
   fenceHeight: 1,
   credits: 0,
@@ -190,6 +191,11 @@ function handleServerMessage(message) {
     state.lastDayTime = state.dayTime;
     state.seasonEndsAt = message.seasonEndsAt || 0;
     state.seasonId = message.seasonId || 0;
+    if (state.lastSeasonId && state.seasonId !== state.lastSeasonId) {
+      showSeasonBanner("Season ended! New season begins.");
+      state.seasonCows = 0;
+    }
+    state.lastSeasonId = state.seasonId;
     startWeatherAudio(state.weather);
     state.lastServerSync = performance.now();
     updateFarmStats();
@@ -520,7 +526,7 @@ function updateLeaderboard() {
     div.className = "leader-item";
     div.textContent = `${index + 1}. ${entry.name}`;
     const count = document.createElement("span");
-    count.textContent = `${entry.season} • ${entry.total}`;
+    count.textContent = `S:${entry.season}  T:${entry.total}`;
     div.appendChild(count);
     leaderboard.appendChild(div);
   });
@@ -586,7 +592,7 @@ function updateCycle() {
 
 function updateSeasonTimer() {
   if (!seasonTimerEl) return;
-  const now = state.online ? Date.now() : performance.now();
+  const now = getSeasonNow();
   if (!state.seasonEndsAt) {
     seasonTimerEl.textContent = "Season: --:--";
     return;
@@ -599,9 +605,29 @@ function updateSeasonTimer() {
   if (!state.online && remainingMs === 0) {
     state.seasonEndsAt = now + 600000;
     state.seasonCows = 0;
-    logEvent("Season ended. New season begins.", "neutral");
+    showSeasonBanner("Season ended. New season begins.");
     updateFarmStats();
   }
+}
+
+function getSeasonNow() {
+  if (state.seasonEndsAt > 1e12) return Date.now();
+  return performance.now();
+}
+
+function showSeasonBanner(message) {
+  logEvent(message, "neutral");
+  const banner = document.createElement("div");
+  banner.className = "season-banner";
+  banner.textContent = message;
+  document.body.appendChild(banner);
+  setTimeout(() => {
+    banner.classList.add("show");
+  }, 20);
+  setTimeout(() => {
+    banner.classList.remove("show");
+    banner.addEventListener("transitionend", () => banner.remove(), { once: true });
+  }, 4200);
 }
 
 function triggerRaidCheck() {
@@ -752,7 +778,8 @@ function renderPuzzle() {
       logEvent("Answer not recognized. Try again.");
       return;
     }
-    const isCorrect = Math.abs(value - puzzle.answer) < 0.01;
+    const expected = deriveExpectedAnswer(puzzle);
+    const isCorrect = Number.isFinite(expected) && Math.abs(value - expected) < 0.01;
     if (isCorrect) {
       logEvent("Correct! Tool or upgrade built.");
       state.puzzle = null;
@@ -766,6 +793,27 @@ function renderPuzzle() {
   });
 }
 
+function deriveExpectedAnswer(puzzle) {
+  if (!puzzle || typeof puzzle.question !== "string") return puzzle.answer;
+  const systemMatch = puzzle.question.match(/x \\+ y = ([\\d.]+), x - y = ([\\d.]+)/);
+  if (systemMatch) {
+    const sum = parseFloat(systemMatch[1]);
+    const diff = parseFloat(systemMatch[2]);
+    if (Number.isFinite(sum) && Number.isFinite(diff)) {
+      return (sum + diff) / 2;
+    }
+  }
+  const triangleMatch = puzzle.question.match(/base ([\\d.]+) and height ([\\d.]+)/);
+  if (triangleMatch) {
+    const base = parseFloat(triangleMatch[1]);
+    const height = parseFloat(triangleMatch[2]);
+    if (Number.isFinite(base) && Number.isFinite(height)) {
+      return (base * height) / 2;
+    }
+  }
+  return puzzle.answer;
+}
+
 function getGradeLevel(difficulty) {
   if (difficulty <= 3) return 5;
   if (difficulty <= 6) return 6;
@@ -773,12 +821,36 @@ function getGradeLevel(difficulty) {
   return 8;
 }
 
+function hashSeed(text) {
+  let hash = 2166136261;
+  for (let i = 0; i < text.length; i += 1) {
+    hash ^= text.charCodeAt(i);
+    hash += (hash << 1) + (hash << 4) + (hash << 7) + (hash << 8) + (hash << 24);
+  }
+  return hash >>> 0;
+}
+
+function makeSeasonRng(cow) {
+  const seasonTag = state.seasonId || 1;
+  const seed = hashSeed(`${cow.id}-${seasonTag}`);
+  let t = seed;
+  return () => {
+    t += 0x6d2b79f5;
+    let r = t;
+    r = Math.imul(r ^ (r >>> 15), r | 1);
+    r ^= r + Math.imul(r ^ (r >>> 7), r | 61);
+    return ((r ^ (r >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
 function generateCapturePuzzle(cow, toolType) {
   const grade = getGradeLevel(cow.difficulty);
+  const rand = makeSeasonRng(cow);
+  const pickInt = (min, maxExclusive) => Math.floor(rand() * (maxExclusive - min)) + min;
   if (toolType === "rope") {
     if (grade <= 5) {
-      const x = 4 + (cow.difficulty % 6);
-      const a = 2 + (cow.speed % 4);
+      const x = pickInt(4, 10);
+      const a = pickInt(2, 6);
       const c = a * x;
       return {
         question: `Grade 5 (Difficulty ${cow.difficulty}): Solve ${a}x = ${c}. What is x?`,
@@ -787,9 +859,9 @@ function generateCapturePuzzle(cow, toolType) {
       };
     }
     if (grade === 6) {
-      const x = 3 + (cow.difficulty % 7);
-      const a = 2 + (cow.escape % 4);
-      const b = 4 + (cow.speed % 5);
+      const x = pickInt(3, 10);
+      const a = pickInt(2, 6);
+      const b = pickInt(4, 9);
       const c = a * x + b;
       return {
         question: `Grade 6 (Difficulty ${cow.difficulty}): Solve ${a}x + ${b} = ${c}. What is x?`,
@@ -798,9 +870,9 @@ function generateCapturePuzzle(cow, toolType) {
       };
     }
     if (grade === 7) {
-      const x = 4 + (cow.difficulty % 6);
-      const a = 2 + (cow.speed % 5);
-      const b = 3 + (cow.escape % 5);
+      const x = pickInt(4, 10);
+      const a = pickInt(2, 7);
+      const b = pickInt(3, 8);
       const c = a * x + b;
       return {
         question: `Grade 7 (Difficulty ${cow.difficulty}): Solve ${a}x + ${b} = ${c}. What is x?`,
@@ -808,8 +880,8 @@ function generateCapturePuzzle(cow, toolType) {
         hint: "Move the constant to the other side, then divide.",
       };
     }
-    const x = 5 + (cow.difficulty % 5);
-    const y = 2 + (cow.escape % 4);
+    const x = pickInt(5, 10);
+    const y = pickInt(2, 6);
     const sum = x + y;
     const diff = x - y;
     return {
@@ -820,8 +892,8 @@ function generateCapturePuzzle(cow, toolType) {
   }
 
   if (grade <= 5) {
-    const length = 6 + (cow.difficulty % 6);
-    const width = 3 + (cow.speed % 4);
+    const length = pickInt(6, 12);
+    const width = pickInt(3, 7);
     const area = length * width;
     return {
       question: `Grade 5 (Difficulty ${cow.difficulty}): Net area is ${area}. Length is ${length}. What width is needed?`,
@@ -830,8 +902,8 @@ function generateCapturePuzzle(cow, toolType) {
     };
   }
   if (grade === 6) {
-    const length = 7 + (cow.difficulty % 6);
-    const width = 4 + (cow.escape % 4);
+    const length = pickInt(7, 13);
+    const width = pickInt(4, 8);
     const perimeter = 2 * (length + width);
     return {
       question: `Grade 6 (Difficulty ${cow.difficulty}): A net frame is ${length} by ${width}. What is the perimeter?`,
@@ -840,8 +912,8 @@ function generateCapturePuzzle(cow, toolType) {
     };
   }
   if (grade === 7) {
-    const base = 6 + (cow.difficulty % 5);
-    const height = 5 + (cow.speed % 4);
+    const base = pickInt(6, 11);
+    const height = pickInt(5, 9);
     const area = (base * height) / 2;
     return {
       question: `Grade 7 (Difficulty ${cow.difficulty}): Triangle net has base ${base} and height ${height}. What is the area?`,
@@ -849,8 +921,8 @@ function generateCapturePuzzle(cow, toolType) {
       hint: "Triangle area = (base x height) / 2.",
     };
   }
-  const side = 4 + (cow.difficulty % 5);
-  const height = 6 + (cow.escape % 4);
+  const side = pickInt(4, 9);
+  const height = pickInt(6, 10);
   const volume = side * side * height;
   return {
     question: `Grade 8 (Difficulty ${cow.difficulty}): Net frame is a square prism. Side ${side}, height ${height}. What is the volume?`,
