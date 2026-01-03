@@ -89,6 +89,103 @@ body {
   background: transparent;
 }
 
+.rule-anim {
+  margin: 12px 0 6px;
+  padding: 12px;
+  border-radius: 14px;
+  background: #f8f2e6;
+  border: 1px solid #e7decf;
+  overflow: hidden;
+}
+
+.rule-stage {
+  position: relative;
+  height: 54px;
+}
+
+.rule-cow {
+  width: 52px;
+  height: 40px;
+  position: absolute;
+  left: 8px;
+  top: 6px;
+  animation: cow-walk 5s ease-in-out infinite;
+}
+
+.rule-coin {
+  position: absolute;
+  top: 6px;
+  left: 90px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: #f7d36a;
+  color: #3a2b1a;
+  font-size: 12px;
+  font-weight: bold;
+  opacity: 0;
+  animation: coin-pop 5s ease-in-out infinite;
+}
+
+.rule-coin.gold {
+  left: 150px;
+  background: #f0b562;
+  animation-delay: 1.6s;
+}
+
+.rule-timer {
+  position: absolute;
+  right: 6px;
+  top: 8px;
+  padding: 6px 10px;
+  border-radius: 10px;
+  background: #e6dfcf;
+  font-size: 12px;
+  font-weight: bold;
+  color: #2f2b23;
+  opacity: 0;
+  animation: timer-fade 5s ease-in-out infinite;
+  animation-delay: 3.2s;
+}
+
+.rule-caption {
+  margin-top: 8px;
+  font-size: 12px;
+  color: #2f2b23;
+  opacity: 0;
+}
+
+.cap-1 { animation: cap-fade 5s ease-in-out infinite; }
+.cap-2 { animation: cap-fade 5s ease-in-out infinite; animation-delay: 1.6s; }
+.cap-3 { animation: cap-fade 5s ease-in-out infinite; animation-delay: 3.2s; }
+
+@keyframes cow-walk {
+  0% { transform: translateX(0) translateY(0); }
+  20% { transform: translateX(42px) translateY(-2px); }
+  40% { transform: translateX(84px) translateY(0); }
+  60% { transform: translateX(120px) translateY(-2px); }
+  80% { transform: translateX(150px) translateY(0); }
+  100% { transform: translateX(180px) translateY(-1px); }
+}
+
+@keyframes coin-pop {
+  0%, 15% { opacity: 0; transform: scale(0.6); }
+  25%, 45% { opacity: 1; transform: scale(1); }
+  60% { opacity: 0; transform: scale(0.8); }
+  100% { opacity: 0; }
+}
+
+@keyframes timer-fade {
+  0%, 60% { opacity: 0; transform: translateY(-6px); }
+  70%, 90% { opacity: 1; transform: translateY(0); }
+  100% { opacity: 0; }
+}
+
+@keyframes cap-fade {
+  0%, 15% { opacity: 0; }
+  25%, 45% { opacity: 1; }
+  60%, 100% { opacity: 0; }
+}
+
 .status {
   display: flex;
   gap: 10px;

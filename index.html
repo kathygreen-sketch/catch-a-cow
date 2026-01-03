@@ -42,6 +42,7 @@
           <div class="pill" id="timeOfDay">Day</div>
           <div class="pill" id="weather">Weather: Sun</div>
           <div class="pill" id="timer">Next shift: 60s</div>
+          <div class="pill" id="seasonTimer">Season: 10:00</div>
         </div>
       </header>
 
@@ -53,7 +54,11 @@
             <div class="value" id="farmNameValue">-</div>
           </div>
           <div class="stat">
-            <div class="label">Cows Owned</div>
+            <div class="label">Cows (Season)</div>
+            <div class="value" id="seasonCowCount">0</div>
+          </div>
+          <div class="stat">
+            <div class="label">Cows (Total)</div>
             <div class="value" id="cowCount">0</div>
           </div>
           <div class="stat">
@@ -73,7 +78,7 @@
           <button id="dissolveFarmBtn" class="action danger">Dissolve Farm</button>
 
           <div class="divider"></div>
-          <h3>Town Leaderboard</h3>
+          <h3 title="Season cows decide the winner.">Town Leaderboard (Season)</h3>
           <div id="leaderboard" class="leaderboard"></div>
         </section>
 
@@ -122,7 +127,30 @@
     <div class="modal" id="startModal">
       <div class="modal-card">
         <h2>Start Your Farm</h2>
-        <p>Name your farm and claim a plot on the grassland.</p>
+        <p>10-minute seasons. Only cows caught this season count toward the winner.</p>
+        <p>Your farm and total cows persist between seasons.</p>
+        <div class="rule-anim" aria-hidden="true">
+          <div class="rule-stage">
+            <svg class="rule-cow" viewBox="0 0 60 46">
+              <circle cx="30" cy="25" r="18" fill="#f7d36a" opacity="0.5" />
+              <rect x="16" y="18" width="28" height="18" rx="5" fill="#8a5c3d" />
+              <rect x="22" y="10" width="16" height="8" rx="3" fill="#f2e6c9" />
+              <circle cx="22" cy="25" r="2" fill="#3a2b1a" />
+              <circle cx="38" cy="25" r="2" fill="#3a2b1a" />
+              <path d="M24 29c3 2.4 9 2.4 12 0" stroke="#3a2b1a" stroke-width="1.6" fill="none" stroke-linecap="round" />
+              <circle cx="21" cy="30" r="2" fill="rgba(255,150,150,0.6)" />
+              <circle cx="39" cy="30" r="2" fill="rgba(255,150,150,0.6)" />
+              <rect x="18" y="34" width="8" height="6" rx="2" fill="#3a2b1a" />
+              <rect x="34" y="34" width="8" height="6" rx="2" fill="#3a2b1a" />
+            </svg>
+            <div class="rule-coin">+1</div>
+            <div class="rule-coin gold">+2</div>
+            <div class="rule-timer">10:00</div>
+          </div>
+          <div class="rule-caption cap-1">Catch cows → season score</div>
+          <div class="rule-caption cap-2">Golden cow = +2 season cows</div>
+          <div class="rule-caption cap-3">Season winner every 10 min</div>
+        </div>
         <input id="farmNameInput" type="text" maxlength="20" placeholder="e.g., Meadowlight Farm" />
         <div class="color-row">
           <label for="farmColorInput">Choose your avatar color</label>

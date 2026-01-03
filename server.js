@@ -8,6 +8,9 @@ const HOST = process.env.HOST || "0.0.0.0";
 const WORLD_SIZE = 2000;
 const CYCLE_MS = 180000;  // 3 minutes total cycle
 const NIGHT_MS = 45000;   // 45 seconds night
+const SEASON_MS = 600000; // 10 minutes
+const GOLDEN_TIMES_MS = [180000, 420000]; // 3 min, 7 min
+const GOLDEN_DURATION_MS = 45000;
 const WEATHER_TYPES = ["sun", "rain", "wind", "fog"];
 
 function loadCows() {
@@ -45,6 +48,9 @@ function initCows() {
     status: "wild",
     owner: null,
     bonus: false,
+    golden: false,
+    seasonId: null,
+    seasonValue: 0,
     visibility: 160,
     allowedTool: computeAllowedTool(cow),
   }));
@@ -60,6 +66,11 @@ const state = {
   lastCycleIndex: -1,
   nextFarmIndex: 0,
   activeRaids: new Map(), // raidId -> { attackerId, defenderId, startTime, puzzleAnswer }
+  seasonStart: Date.now(),
+  seasonId: 1,
+  goldenCowId: null,
+  goldenExpiresAt: 0,
+  nextGoldenIndex: 0,
 };
 
 const MIN_FARM_DISTANCE = 250; // Minimum pixels between farm centers
@@ -140,6 +151,73 @@ function updateCycle() {
     state.lastCycleIndex = cycleIndex;
     state.weather = WEATHER_TYPES[Math.floor(Math.random() * WEATHER_TYPES.length)];
   }
+
+  updateSeason(now);
+}
+
+function updateSeason(now) {
+  const seasonElapsed = now - state.seasonStart;
+  if (seasonElapsed >= SEASON_MS) {
+    endSeason(now);
+    return;
+  }
+
+  if (state.goldenCowId && now >= state.goldenExpiresAt) {
+    clearGoldenCow();
+  }
+
+  const nextTime = GOLDEN_TIMES_MS[state.nextGoldenIndex];
+  if (nextTime !== undefined && seasonElapsed >= nextTime) {
+    spawnGoldenCow(now);
+    state.nextGoldenIndex += 1;
+  }
+}
+
+function clearGoldenCow() {
+  if (!state.goldenCowId) return;
+  const cow = state.cows.find((item) => item.id === state.goldenCowId);
+  if (cow) {
+    cow.golden = false;
+  }
+  state.goldenCowId = null;
+  state.goldenExpiresAt = 0;
+}
+
+function spawnGoldenCow(now) {
+  const wild = state.cows.filter((cow) => cow.status === "wild");
+  if (wild.length === 0) return;
+  const cow = wild[Math.floor(Math.random() * wild.length)];
+  cow.golden = true;
+  state.goldenCowId = cow.id;
+  state.goldenExpiresAt = now + GOLDEN_DURATION_MS;
+  broadcast({ type: "event", message: "Golden cow appeared! Worth +2 season cows." });
+}
+
+function endSeason(now) {
+  let winner = null;
+  state.farms.forEach((farm) => {
+    if (!winner || (farm.seasonCows || 0) > (winner.seasonCows || 0)) {
+      winner = farm;
+    }
+  });
+  if (winner) {
+    broadcast({ type: "event", message: `Season winner: ${winner.name}! New season begins.` });
+  } else {
+    broadcast({ type: "event", message: "Season ended. New season begins." });
+  }
+
+  state.seasonStart = now;
+  state.seasonId += 1;
+  state.nextGoldenIndex = 0;
+  clearGoldenCow();
+  state.farms.forEach((farm) => {
+    farm.seasonCows = 0;
+  });
+  state.cows.forEach((cow) => {
+    cow.seasonId = null;
+    cow.seasonValue = 0;
+    cow.golden = false;
+  });
 }
 
 function getVisibility(cow) {
@@ -256,20 +334,43 @@ function handleCapture(player, cowId, toolPower) {
     return;
   }
   const weatherBoost = cow.favoredWeather === state.weather ? -1 : 0;
-  const difficulty = cow.difficulty + weatherBoost;
+  const difficulty = cow.difficulty + weatherBoost + getSeasonDifficultyBoost(player.id);
   const roll = Math.random() * 2;
   if (toolPower + roll >= difficulty) {
     cow.status = "captured";
     cow.owner = player.id;
     cow.bonus = cow.favoredWeather === state.weather;
+    cow.seasonId = state.seasonId;
+    cow.seasonValue = cow.golden ? 2 : 1;
     const farm = getFarmById(player.id);
     if (farm) {
       farm.cowsList.push(cow.id);
+      farm.seasonCows = (farm.seasonCows || 0) + cow.seasonValue;
+    }
+    if (cow.golden) {
+      broadcast({ type: "event", message: `${player.name} caught the Golden Cow! +2 season cows.` });
+      cow.golden = false;
+      state.goldenCowId = null;
+      state.goldenExpiresAt = 0;
     }
     broadcast({ type: "event", message: `${player.name} caught ${cow.name}.` });
   } else {
     send(player.ws, { type: "event", message: `${cow.name} escaped from your ${player.name} attempt.` });
   }
+}
+
+function getSeasonDifficultyBoost(playerId) {
+  const farms = state.farms;
+  if (farms.length < 2) return 0;
+  const scores = farms.map((farm) => farm.seasonCows || 0);
+  const max = Math.max(...scores);
+  const min = Math.min(...scores);
+  const farm = getFarmById(playerId);
+  if (!farm) return 0;
+  const score = farm.seasonCows || 0;
+  if (score === max && max !== min) return 1;
+  if (score === min && max !== min) return -1;
+  return 0;
 }
 
 function generateRaidPuzzle() {
@@ -422,17 +523,17 @@ function resolveRaid(raidId, defenseSuccess) {
       // Find a cow that can be stolen (difficulty <= defenseStrength can't escape)
       const stealableCows = defenderFarm.cowsList
         .map((cowId) => state.cows.find((c) => c.id === cowId))
-        .filter((cow) => cow && cow.difficulty > defenseStrength);
+        .filter((cow) => cow && cow.difficulty > defenseStrength && cow.seasonId === state.seasonId);
 
       if (stealableCows.length === 0) {
-        // All cows protected by strong fence
+        // No season cows available to steal
         if (attacker) {
-          send(attacker.ws, { type: "raidResult", success: false, message: `${raid.defenderName}'s fence is too strong! No cows could escape.` });
-          send(attacker.ws, { type: "event", message: `${raid.defenderName}'s strong fence protected all cows.` });
+          send(attacker.ws, { type: "raidResult", success: false, message: `${raid.defenderName} has no season cows to steal.` });
+          send(attacker.ws, { type: "event", message: `${raid.defenderName} has no season cows to steal.` });
         }
         if (defender) {
-          send(defender.ws, { type: "raidResult", success: true, message: "Your strong fence protected your cows!" });
-          send(defender.ws, { type: "event", message: "Your fence protected your cows from the raid!" });
+          send(defender.ws, { type: "raidResult", success: true, message: "No season cows were available to steal." });
+          send(defender.ws, { type: "event", message: "No season cows were available to steal." });
         }
         return;
       }
@@ -448,7 +549,9 @@ function resolveRaid(raidId, defenseSuccess) {
         attackerFarm.cowsList.push(stolenCowId);
         stolenCow.owner = raid.attackerId;
         stolenCow.bonus = false;
+        attackerFarm.seasonCows = (attackerFarm.seasonCows || 0) + (stolenCow.seasonValue || 1);
       }
+      defenderFarm.seasonCows = Math.max(0, (defenderFarm.seasonCows || 0) - (stolenCow.seasonValue || 1));
 
       const cowName = stolenCow.name;
 
@@ -468,6 +571,8 @@ function resolveRaid(raidId, defenseSuccess) {
 function snapshot() {
   return {
     type: "state",
+    seasonEndsAt: state.seasonStart + SEASON_MS,
+    seasonId: state.seasonId,
     cows: state.cows.map((cow) => ({
       id: cow.id,
       name: cow.name,
@@ -481,6 +586,7 @@ function snapshot() {
       status: cow.status,
       owner: cow.owner,
       bonus: cow.bonus,
+      golden: cow.golden,
       visibility: cow.visibility,
       allowedTool: cow.allowedTool,
     })),
@@ -490,6 +596,7 @@ function snapshot() {
       x: farm.x,
       y: farm.y,
       cowsList: farm.cowsList,
+      seasonCows: farm.seasonCows || 0,
     })),
     players: Array.from(state.players.values()).map((player) => ({
       id: player.id,
@@ -550,6 +657,7 @@ wss.on("connection", (ws) => {
     cowsList: [],
     fenceStrength: 1,
     lockLevel: 0,
+    seasonCows: 0,
   };
   state.farms.push(playerFarm);
 
@@ -619,6 +727,9 @@ wss.on("connection", (ws) => {
           cow.status = "wild";
           cow.owner = null;
           cow.bonus = false;
+          cow.golden = false;
+          cow.seasonId = null;
+          cow.seasonValue = 0;
           cow.x = 200 + Math.random() * (WORLD_SIZE - 400);
           cow.y = 200 + Math.random() * (WORLD_SIZE - 400);
         }
@@ -654,6 +765,9 @@ wss.on("connection", (ws) => {
           cow.status = "wild";
           cow.owner = null;
           cow.bonus = false;
+          cow.golden = false;
+          cow.seasonId = null;
+          cow.seasonValue = 0;
           // Move cow to random position away from farms
           cow.x = 200 + Math.random() * (WORLD_SIZE - 400);
           cow.y = 200 + Math.random() * (WORLD_SIZE - 400);

@@ -4,6 +4,7 @@ const minimap = document.getElementById("minimap");
 const miniCtx = minimap.getContext("2d");
 
 const farmNameValue = document.getElementById("farmNameValue");
+const seasonCowCount = document.getElementById("seasonCowCount");
 const cowCount = document.getElementById("cowCount");
 const fenceStrengthEl = document.getElementById("fenceStrength");
 const creditsEl = document.getElementById("credits");
@@ -19,6 +20,7 @@ const logFeed = document.getElementById("logFeed");
 const timeOfDayEl = document.getElementById("timeOfDay");
 const weatherEl = document.getElementById("weather");
 const timerEl = document.getElementById("timer");
+const seasonTimerEl = document.getElementById("seasonTimer");
 const connectionStatus = document.getElementById("connectionStatus");
 const touchControls = document.getElementById("touchControls");
 
@@ -49,6 +51,9 @@ const state = {
   player: { x: WORLD_SIZE / 2, y: WORLD_SIZE / 2, vx: 0, vy: 0 },
   cows: [],
   captured: [],
+  seasonCows: 0,
+  seasonEndsAt: 0,
+  seasonId: 0,
   fenceStrength: 1,
   fenceHeight: 1,
   credits: 0,
@@ -56,6 +61,7 @@ const state = {
   lockStrength: 0,
   weather: WEATHER_TYPES[0],
   dayTime: "day",
+  lastDayTime: "day",
   cycleStart: performance.now(),
   cycleLengthMs: 180000,  // 3 minutes total
   nightLengthMs: 45000,   // 45 seconds night
@@ -172,10 +178,17 @@ function handleServerMessage(message) {
     if (self) {
       state.selfFarm = { ...self, size: 160 };
       state.captured = self.cowsList.map((cowId) => message.cows.find((cow) => cow.id === cowId)).filter(Boolean);
+      state.seasonCows = self.seasonCows || 0;
     }
     state.otherPlayers = (message.players || []).filter((p) => p.id !== state.playerId);
     state.weather = message.weather;
     state.dayTime = message.dayTime;
+    if (state.lastDayTime !== state.dayTime && state.dayTime === "night") {
+      logEvent("Raid window open! (30s)", "neutral");
+    }
+    state.lastDayTime = state.dayTime;
+    state.seasonEndsAt = message.seasonEndsAt || 0;
+    state.seasonId = message.seasonId || 0;
     startWeatherAudio(state.weather);
     state.lastServerSync = performance.now();
     updateFarmStats();
@@ -433,6 +446,9 @@ function initCows() {
     y: Math.random() * WORLD_SIZE,
     status: "wild",
     owner: null,
+    golden: false,
+    seasonId: null,
+    seasonValue: 0,
     allowedTool: computeAllowedTool(cow),
   }));
 }
@@ -445,12 +461,17 @@ function initFarms() {
 function updateLeaderboard() {
   const otherFarms = state.farms.map((farm) => ({
     name: farm.name,
-    cows: farm.cowsList.length,
+    season: farm.seasonCows || 0,
+    total: farm.cowsList.length,
   }));
   const entries = [
-    { name: state.farmName || "My Farm", cows: state.captured.length },
+    {
+      name: state.farmName || "My Farm",
+      season: state.seasonCows,
+      total: state.captured.length,
+    },
     ...otherFarms,
-  ].sort((a, b) => b.cows - a.cows);
+  ].sort((a, b) => b.season - a.season);
 
   leaderboard.innerHTML = "";
   entries.forEach((entry, index) => {
@@ -458,7 +479,7 @@ function updateLeaderboard() {
     div.className = "leader-item";
     div.textContent = `${index + 1}. ${entry.name}`;
     const count = document.createElement("span");
-    count.textContent = entry.cows;
+    count.textContent = `${entry.season} • ${entry.total}`;
     div.appendChild(count);
     leaderboard.appendChild(div);
   });
@@ -466,6 +487,7 @@ function updateLeaderboard() {
 
 function updateFarmStats() {
   farmNameValue.textContent = state.farmName;
+  seasonCowCount.textContent = state.seasonCows;
   cowCount.textContent = state.captured.length;
   const bonusCount = state.captured.filter((cow) => cow.bonus).length;
   state.credits = state.captured.length * 5 + bonusCount * 5;
@@ -487,6 +509,7 @@ function updateCycle() {
     timeOfDayEl.textContent = state.dayTime === "night" ? "Night" : "Day";
     weatherEl.textContent = `Weather: ${WEATHER_LABELS[state.weather]}`;
     timerEl.textContent = "Server sync";
+    updateSeasonTimer();
     return;
   }
   const now = performance.now();
@@ -498,11 +521,16 @@ function updateCycle() {
 
   state.dayTime = isNight ? "night" : "day";
   timeOfDayEl.textContent = isNight ? "Night" : "Day";
+  if (state.lastDayTime !== state.dayTime && state.dayTime === "night") {
+    logEvent("Raid window open! (30s)", "neutral");
+  }
+  state.lastDayTime = state.dayTime;
 
   const remaining = isNight
     ? state.cycleLengthMs - cyclePos
     : dayLength - cyclePos;
   timerEl.textContent = `Next shift: ${Math.ceil(remaining / 1000)}s`;
+  updateSeasonTimer();
 
   if (cycleIndex !== state.cycleIndex) {
     state.cycleIndex = cycleIndex;
@@ -512,6 +540,26 @@ function updateCycle() {
   if (isNight && state.raidCheckedCycle !== cycleIndex) {
     state.raidCheckedCycle = cycleIndex;
     triggerRaidCheck();
+  }
+}
+
+function updateSeasonTimer() {
+  if (!seasonTimerEl) return;
+  const now = state.online ? Date.now() : performance.now();
+  if (!state.seasonEndsAt) {
+    seasonTimerEl.textContent = "Season: --:--";
+    return;
+  }
+  const remainingMs = Math.max(0, state.seasonEndsAt - now);
+  const totalSeconds = Math.ceil(remainingMs / 1000);
+  const minutes = String(Math.floor(totalSeconds / 60)).padStart(2, "0");
+  const seconds = String(totalSeconds % 60).padStart(2, "0");
+  seasonTimerEl.textContent = `Season: ${minutes}:${seconds}`;
+  if (!state.online && remainingMs === 0) {
+    state.seasonEndsAt = now + 600000;
+    state.seasonCows = 0;
+    logEvent("Season ended. New season begins.", "neutral");
+    updateFarmStats();
   }
 }
 
@@ -544,6 +592,9 @@ function handleRaidLoss() {
   const stolen = state.captured.pop();
   stolen.owner = null;
   stolen.bonus = false;
+  if (stolen.seasonValue) {
+    state.seasonCows = Math.max(0, state.seasonCows - stolen.seasonValue);
+  }
   logEvent(`${stolen.name} was stolen in the night.`, "negative");
   updateFarmStats();
 }
@@ -913,7 +964,10 @@ function attemptCapture(cow, toolPower, toolType) {
     cow.status = "captured";
     cow.owner = "player";
     cow.bonus = cow.favoredWeather === state.weather;
+    cow.seasonId = state.seasonId || 1;
+    cow.seasonValue = 1;
     state.captured.push(cow);
+    state.seasonCows += 1;
     logEvent(`You caught ${cow.name}!`, "positive");
     updateFarmStats();
   } else {
@@ -1010,6 +1064,7 @@ function drawWorld() {
     if (screenY < -VIEW_PADDING || screenY > viewH + VIEW_PADDING) return;
 
     const isHappy = cow.favoredWeather === state.weather;
+    const isGolden = cow.golden;
     const t = performance.now() / 1000;
 
     // Bounce effect when happy
@@ -1017,13 +1072,13 @@ function drawWorld() {
     const drawY = screenY - bounce;
 
     // Glow effect when happy
-    if (isHappy) {
+    if (isHappy || isGolden) {
       ctx.save();
-      ctx.shadowColor = "#ffdd44";
-      ctx.shadowBlur = 15;
-      ctx.fillStyle = "rgba(255, 220, 100, 0.3)";
+      ctx.shadowColor = isGolden ? "#ffb347" : "#ffdd44";
+      ctx.shadowBlur = isGolden ? 22 : 15;
+      ctx.fillStyle = isGolden ? "rgba(255, 185, 90, 0.4)" : "rgba(255, 220, 100, 0.3)";
       ctx.beginPath();
-      ctx.arc(screenX, drawY, 18, 0, Math.PI * 2);
+      ctx.arc(screenX, drawY, isGolden ? 20 : 18, 0, Math.PI * 2);
       ctx.fill();
       ctx.restore();
     }
@@ -1079,6 +1134,14 @@ function drawWorld() {
         ctx.arc(sx, sy, size, 0, Math.PI * 2);
         ctx.fill();
       }
+    }
+
+    if (isGolden) {
+      ctx.fillStyle = "rgba(255, 215, 120, 0.9)";
+      ctx.font = "9px Rockwell, Palatino, Georgia, serif";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "bottom";
+      ctx.fillText("★", screenX, drawY - 14);
     }
   });
 
@@ -1881,6 +1944,9 @@ startBtn.addEventListener("click", () => {
     if (!state.online && state.cows.length === 0) {
       initCows();
       initFarms();
+      state.seasonEndsAt = performance.now() + 600000;
+      state.seasonId = 1;
+      state.seasonCows = 0;
       updateFarmStats();
       logEvent("Welcome to the grassland. Find a cow to begin.", "neutral");
       setWeather(WEATHER_TYPES[Math.floor(Math.random() * WEATHER_TYPES.length)]);
