@@ -76,7 +76,14 @@ const state = {
   playerId: null,
   lastMoveSend: 0,
   touchDirs: new Set(),
-  audio: { ctx: null, unlocked: false },
+  audio: {
+    ctx: null,
+    unlocked: false,
+    ambient: null,
+    noiseBuffer: null,
+    lastWeather: null,
+    mooTimer: null,
+  },
   log: [],
   pendingRaid: null, // { raidId, attackerName, puzzle, timeLimit, start }
   raidingFarm: null, // farmId we're currently raiding
@@ -169,6 +176,7 @@ function handleServerMessage(message) {
     state.otherPlayers = (message.players || []).filter((p) => p.id !== state.playerId);
     state.weather = message.weather;
     state.dayTime = message.dayTime;
+    startWeatherAudio(state.weather);
     state.lastServerSync = performance.now();
     updateFarmStats();
     return;
@@ -246,6 +254,8 @@ function initAudio() {
   state.audio.ctx = ctx;
   ctx.resume().then(() => {
     state.audio.unlocked = true;
+    startWeatherAudio(state.weather);
+    startMooAmbience();
   }).catch(() => {});
 }
 
@@ -274,6 +284,146 @@ function playLogSound(type) {
   osc.connect(gain).connect(ctx.destination);
   osc.start(now);
   osc.stop(now + 0.22);
+}
+
+function getNoiseBuffer() {
+  if (state.audio.noiseBuffer) return state.audio.noiseBuffer;
+  const ctx = state.audio.ctx;
+  const buffer = ctx.createBuffer(1, ctx.sampleRate * 2, ctx.sampleRate);
+  const data = buffer.getChannelData(0);
+  for (let i = 0; i < data.length; i += 1) {
+    data[i] = Math.random() * 2 - 1;
+  }
+  state.audio.noiseBuffer = buffer;
+  return buffer;
+}
+
+function stopWeatherAudio() {
+  if (!state.audio.ambient) return;
+  const { nodes, cleanup } = state.audio.ambient;
+  if (cleanup) cleanup();
+  nodes.forEach((node) => {
+    try {
+      if (node.stop) node.stop();
+    } catch (error) {
+      // Ignore nodes already stopped.
+    }
+    if (node.disconnect) node.disconnect();
+  });
+  state.audio.ambient = null;
+}
+
+function startWeatherAudio(weather) {
+  if (!state.audio.unlocked || !state.audio.ctx) return;
+  if (state.audio.lastWeather === weather) return;
+  stopWeatherAudio();
+  state.audio.lastWeather = weather;
+  const ctx = state.audio.ctx;
+
+  if (weather === "sun") {
+    const gain = ctx.createGain();
+    gain.gain.value = 0.045;
+    gain.connect(ctx.destination);
+
+    let timer = null;
+    const chirp = () => {
+      const osc = ctx.createOscillator();
+      const chirpGain = ctx.createGain();
+      const now = ctx.currentTime;
+      osc.type = "sine";
+      osc.frequency.setValueAtTime(1200, now);
+      osc.frequency.exponentialRampToValueAtTime(800, now + 0.18);
+      chirpGain.gain.setValueAtTime(0.0001, now);
+      chirpGain.gain.exponentialRampToValueAtTime(0.35, now + 0.05);
+      chirpGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.2);
+      osc.connect(chirpGain).connect(gain);
+      osc.start(now);
+      osc.stop(now + 0.22);
+      const gap = 2200 + Math.random() * 3200;
+      timer = setTimeout(chirp, gap);
+    };
+    timer = setTimeout(chirp, 400);
+    state.audio.ambient = {
+      nodes: [gain],
+      cleanup: () => clearTimeout(timer),
+    };
+    return;
+  }
+
+  if (weather === "rain") {
+    const noise = ctx.createBufferSource();
+    noise.buffer = getNoiseBuffer();
+    noise.loop = true;
+    const filter = ctx.createBiquadFilter();
+    filter.type = "lowpass";
+    filter.frequency.value = 1200;
+    const gain = ctx.createGain();
+    gain.gain.value = 0.07;
+    noise.connect(filter).connect(gain).connect(ctx.destination);
+    noise.start();
+    state.audio.ambient = { nodes: [noise, filter, gain] };
+    return;
+  }
+
+  if (weather === "wind") {
+    const noise = ctx.createBufferSource();
+    noise.buffer = getNoiseBuffer();
+    noise.loop = true;
+    const filter = ctx.createBiquadFilter();
+    filter.type = "bandpass";
+    filter.frequency.value = 400;
+    filter.Q.value = 0.7;
+    const lfo = ctx.createOscillator();
+    lfo.type = "sine";
+    lfo.frequency.value = 0.08;
+    const lfoGain = ctx.createGain();
+    lfoGain.gain.value = 220;
+    lfo.connect(lfoGain).connect(filter.frequency);
+    const gain = ctx.createGain();
+    gain.gain.value = 0.06;
+    noise.connect(filter).connect(gain).connect(ctx.destination);
+    noise.start();
+    lfo.start();
+    state.audio.ambient = { nodes: [noise, filter, lfo, lfoGain, gain] };
+    return;
+  }
+
+  if (weather === "fog") {
+    const noise = ctx.createBufferSource();
+    noise.buffer = getNoiseBuffer();
+    noise.loop = true;
+    const filter = ctx.createBiquadFilter();
+    filter.type = "lowpass";
+    filter.frequency.value = 600;
+    const gain = ctx.createGain();
+    gain.gain.value = 0.05;
+    noise.connect(filter).connect(gain).connect(ctx.destination);
+    noise.start();
+    state.audio.ambient = { nodes: [noise, filter, gain] };
+  }
+}
+
+function startMooAmbience() {
+  if (!state.audio.unlocked || !state.audio.ctx) return;
+  if (state.audio.mooTimer) return;
+  const ctx = state.audio.ctx;
+  const scheduleMoo = () => {
+    const now = ctx.currentTime;
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = "sawtooth";
+    osc.frequency.setValueAtTime(140 + Math.random() * 60, now);
+    osc.frequency.exponentialRampToValueAtTime(90 + Math.random() * 30, now + 0.5);
+    gain.gain.setValueAtTime(0.0001, now);
+    gain.gain.exponentialRampToValueAtTime(0.12, now + 0.08);
+    gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.9);
+    osc.connect(gain).connect(ctx.destination);
+    osc.start(now);
+    osc.stop(now + 1.0);
+    const gap = 4500 + Math.random() * 6500;
+    state.audio.mooTimer = setTimeout(scheduleMoo, gap);
+  };
+  state.audio.mooTimer = setTimeout(scheduleMoo, 1200);
 }
 
 function initCows() {
@@ -329,6 +479,7 @@ function updateFarmStats() {
 function setWeather(weather) {
   state.weather = weather;
   weatherEl.textContent = `Weather: ${WEATHER_LABELS[weather]}`;
+  startWeatherAudio(weather);
 }
 
 function updateCycle() {
