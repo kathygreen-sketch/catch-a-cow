@@ -89,6 +89,7 @@ const state = {
     noiseBuffer: null,
     lastWeather: null,
     mooTimer: null,
+    mooBuffer: null,
   },
   log: [],
   pendingRaid: null, // { raidId, attackerName, puzzle, timeLimit, start }
@@ -268,6 +269,7 @@ function initAudio() {
   ctx.resume().then(() => {
     state.audio.unlocked = true;
     startWeatherAudio(state.weather);
+    loadMooBuffer();
     startMooAmbience();
   }).catch(() => {});
 }
@@ -309,6 +311,17 @@ function getNoiseBuffer() {
   }
   state.audio.noiseBuffer = buffer;
   return buffer;
+}
+
+async function loadMooBuffer() {
+  if (state.audio.mooBuffer || !state.audio.ctx) return;
+  try {
+    const response = await fetch("assets/cow-moo.mp3");
+    const data = await response.arrayBuffer();
+    state.audio.mooBuffer = await state.audio.ctx.decodeAudioData(data);
+  } catch (error) {
+    // Keep synth fallback if audio fails to load.
+  }
 }
 
 function stopWeatherAudio() {
@@ -422,30 +435,46 @@ function startMooAmbience() {
   const ctx = state.audio.ctx;
   const scheduleMoo = () => {
     const now = ctx.currentTime;
-    const base = 110 + Math.random() * 30;
-    const osc = ctx.createOscillator();
-    const osc2 = ctx.createOscillator();
-    const filter = ctx.createBiquadFilter();
-    const gain = ctx.createGain();
-    osc.type = "triangle";
-    osc2.type = "sine";
-    osc.frequency.setValueAtTime(base, now);
-    osc.frequency.exponentialRampToValueAtTime(base * 0.75, now + 0.6);
-    osc2.frequency.setValueAtTime(base * 2.2, now);
-    osc2.frequency.exponentialRampToValueAtTime(base * 1.7, now + 0.6);
-    filter.type = "lowpass";
-    filter.frequency.setValueAtTime(600, now);
-    gain.gain.setValueAtTime(0.0001, now);
-    gain.gain.exponentialRampToValueAtTime(0.14, now + 0.1);
-    gain.gain.exponentialRampToValueAtTime(0.0001, now + 1.1);
-    osc.connect(filter);
-    osc2.connect(filter);
-    filter.connect(gain).connect(ctx.destination);
-    osc.start(now);
-    osc2.start(now);
-    osc.stop(now + 1.2);
-    osc2.stop(now + 1.2);
-    const gap = 4500 + Math.random() * 6500;
+    if (state.audio.mooBuffer) {
+      const source = ctx.createBufferSource();
+      const gain = ctx.createGain();
+      source.buffer = state.audio.mooBuffer;
+      source.playbackRate.value = 0.9 + Math.random() * 0.2;
+      gain.gain.setValueAtTime(0.0001, now);
+      gain.gain.exponentialRampToValueAtTime(0.18, now + 0.08);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + 1.6);
+      source.connect(gain).connect(ctx.destination);
+      const segment = 1.6;
+      const maxOffset = Math.max(0, source.buffer.duration - segment - 0.1);
+      const offset = Math.random() * maxOffset;
+      source.start(now, offset, segment);
+      source.stop(now + segment + 0.05);
+    } else {
+      const base = 110 + Math.random() * 30;
+      const osc = ctx.createOscillator();
+      const osc2 = ctx.createOscillator();
+      const filter = ctx.createBiquadFilter();
+      const gain = ctx.createGain();
+      osc.type = "triangle";
+      osc2.type = "sine";
+      osc.frequency.setValueAtTime(base, now);
+      osc.frequency.exponentialRampToValueAtTime(base * 0.75, now + 0.6);
+      osc2.frequency.setValueAtTime(base * 2.2, now);
+      osc2.frequency.exponentialRampToValueAtTime(base * 1.7, now + 0.6);
+      filter.type = "lowpass";
+      filter.frequency.setValueAtTime(600, now);
+      gain.gain.setValueAtTime(0.0001, now);
+      gain.gain.exponentialRampToValueAtTime(0.14, now + 0.1);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + 1.1);
+      osc.connect(filter);
+      osc2.connect(filter);
+      filter.connect(gain).connect(ctx.destination);
+      osc.start(now);
+      osc2.start(now);
+      osc.stop(now + 1.2);
+      osc2.stop(now + 1.2);
+    }
+    const gap = 5000 + Math.random() * 7000;
     state.audio.mooTimer = setTimeout(scheduleMoo, gap);
   };
   state.audio.mooTimer = setTimeout(scheduleMoo, 1200);

@@ -1,4 +1,4 @@
-const CACHE_NAME = "catch-a-cow-v9";
+const CACHE_NAME = "catch-a-cow-v11";
 const ASSETS = [
   "./",
   "./index.html",
@@ -6,7 +6,8 @@ const ASSETS = [
   "./app.js",
   "./data.js",
   "./manifest.json",
-  "./icon.svg"
+  "./icon.svg",
+  "./assets/cow-moo.mp3"
 ];
 
 self.addEventListener("install", (event) => {
