@@ -1,4 +1,4 @@
-const CACHE_NAME = "catch-a-cow-v8";
+const CACHE_NAME = "catch-a-cow-v9";
 const ASSETS = [
   "./",
   "./index.html",
