@@ -6,6 +6,7 @@ const miniCtx = minimap.getContext("2d");
 const farmNameValue = document.getElementById("farmNameValue");
 const seasonCowCount = document.getElementById("seasonCowCount");
 const cowCount = document.getElementById("cowCount");
+const farmCapacityEl = document.getElementById("farmCapacity");
 const fenceStrengthEl = document.getElementById("fenceStrength");
 const creditsEl = document.getElementById("credits");
 const lockLevelEl = document.getElementById("lockLevel");
@@ -15,6 +16,7 @@ const netBtn = document.getElementById("netBtn");
 const puzzleBox = document.getElementById("puzzleBox");
 const upgradeFenceBtn = document.getElementById("upgradeFenceBtn");
 const upgradeLockBtn = document.getElementById("upgradeLockBtn");
+const expandFarmBtn = document.getElementById("expandFarmBtn");
 const leaderboard = document.getElementById("leaderboard");
 const logFeed = document.getElementById("logFeed");
 const timeOfDayEl = document.getElementById("timeOfDay");
@@ -36,6 +38,10 @@ const dissolveFarmBtn = document.getElementById("dissolveFarmBtn");
 const WORLD_SIZE = 2000;
 const VIEW_PADDING = 80;
 const PLAYER_SPEED = 2.4;
+const FARM_CAPACITY_STEP = 16;
+const FARM_EXPAND_COST = 100;
+const FARM_BASE_SIZE = 160;
+const FARM_MAX_SIZE = 260;
 
 const WEATHER_TYPES = ["sun", "rain", "wind", "fog"];
 const WEATHER_LABELS = {
@@ -44,6 +50,11 @@ const WEATHER_LABELS = {
   wind: "Wind",
   fog: "Fog",
 };
+
+function computeFarmSize(capacity) {
+  const steps = Math.max(0, Math.floor((capacity - FARM_CAPACITY_STEP) / FARM_CAPACITY_STEP));
+  return Math.min(FARM_MAX_SIZE, FARM_BASE_SIZE + steps * 14);
+}
 
 const state = {
   farmName: "",
@@ -55,6 +66,7 @@ const state = {
   seasonEndsAt: 0,
   seasonId: 0,
   lastSeasonId: 0,
+  farmCapacity: 16,
   fenceStrength: 1,
   fenceHeight: 1,
   credits: 0,
@@ -175,12 +187,24 @@ function handleServerMessage(message) {
     state.cows = message.cows;
     state.farms = message.farms
       .filter((farm) => farm.id !== state.playerId)
-      .map((farm) => ({ ...farm, size: 160, strength: 3 }));
+      .map((farm) => {
+        const capacity = Math.max(farm.capacity || FARM_CAPACITY_STEP, farm.cowsList.length);
+        return {
+          ...farm,
+          size: farm.size || computeFarmSize(capacity),
+          strength: 3,
+          capacity,
+        };
+      });
     const self = message.farms.find((farm) => farm.id === state.playerId);
     if (self) {
-      state.selfFarm = { ...self, size: 160 };
       state.captured = self.cowsList.map((cowId) => message.cows.find((cow) => cow.id === cowId)).filter(Boolean);
       state.seasonCows = self.seasonCows || 0;
+      state.farmCapacity = Math.max(self.capacity || FARM_CAPACITY_STEP, state.captured.length);
+      state.selfFarm = {
+        ...self,
+        size: self.size || computeFarmSize(state.farmCapacity),
+      };
     }
     state.otherPlayers = (message.players || []).filter((p) => p.id !== state.playerId);
     state.weather = message.weather;
@@ -501,7 +525,11 @@ function initCows() {
 }
 
 function initFarms() {
-  state.selfFarm = { x: WORLD_SIZE / 2, y: WORLD_SIZE / 2, size: 160 };
+  state.selfFarm = {
+    x: WORLD_SIZE / 2,
+    y: WORLD_SIZE / 2,
+    size: computeFarmSize(state.farmCapacity),
+  };
   state.farms = [];
 }
 
@@ -536,12 +564,14 @@ function updateFarmStats() {
   farmNameValue.textContent = state.farmName;
   seasonCowCount.textContent = state.seasonCows;
   cowCount.textContent = state.captured.length;
+  farmCapacityEl.textContent = `${state.captured.length} / ${state.farmCapacity}`;
   const bonusCount = state.captured.filter((cow) => cow.bonus).length;
   state.credits = state.captured.length * 5 + bonusCount * 5;
   fenceStrengthEl.textContent = state.fenceStrength + state.lockStrength;
   creditsEl.textContent = state.credits;
   lockLevelEl.textContent = state.lockLevel;
   upgradeLockBtn.textContent = `Buy Lock (${getLockCost()} credits)`;
+  expandFarmBtn.textContent = `Expand Farm (+${FARM_CAPACITY_STEP} cows, ${FARM_EXPAND_COST} credits)`;
   updateLeaderboard();
 }
 
@@ -1060,6 +1090,10 @@ function generateDefensePuzzle() {
 }
 
 function attemptCapture(cow, toolPower, toolType) {
+  if (state.captured.length >= state.farmCapacity) {
+    logEvent("Farm is full. Expand it to hold more cows.", "negative");
+    return;
+  }
   const requiredTool = cow.allowedTool ? cow.allowedTool : computeAllowedTool(cow);
   if (toolType !== requiredTool) {
     logEvent(`${cow.name} can only be caught with a ${requiredTool}.`, "negative");
@@ -1093,7 +1127,6 @@ function upgradeFence() {
   showPuzzle(puzzle, () => {
     state.fenceStrength += 2;
     state.fenceHeight += 1;
-    state.selfFarm.size = Math.min(240, 160 + state.fenceHeight * 6);
     updateFarmStats();
     // Sync with server
     if (state.online) {
@@ -1115,6 +1148,20 @@ function upgradeLocks() {
   // Sync with server
   if (state.online) {
     sendToServer({ type: "upgradeLock", lockLevel: state.lockLevel });
+  }
+}
+
+function expandFarm() {
+  if (state.credits < FARM_EXPAND_COST) {
+    logEvent(`Not enough credits. Need ${FARM_EXPAND_COST} credits to expand.`, "negative");
+    return;
+  }
+  state.farmCapacity += FARM_CAPACITY_STEP;
+  state.selfFarm.size = computeFarmSize(state.farmCapacity);
+  updateFarmStats();
+  logEvent(`Farm expanded. Capacity is now ${state.farmCapacity}.`, "positive");
+  if (state.online) {
+    sendToServer({ type: "expandFarm", capacity: state.farmCapacity });
   }
 }
 
@@ -1649,7 +1696,7 @@ function getAllFarms() {
     name: state.farmName,
     x: state.selfFarm.x,
     y: state.selfFarm.y,
-    size: 160,
+    size: state.selfFarm.size || computeFarmSize(state.farmCapacity),
     cowsList: state.captured,
     isPlayer: true,
   };
@@ -1657,7 +1704,7 @@ function getAllFarms() {
     name: farm.name,
     x: farm.x,
     y: farm.y,
-    size: 160,
+    size: farm.size || computeFarmSize(farm.capacity || FARM_CAPACITY_STEP),
     cowsList: farm.cowsList,
     isPlayer: false,
   }));
@@ -1997,6 +2044,7 @@ netBtn.addEventListener("click", () => {
 
 upgradeFenceBtn.addEventListener("click", upgradeFence);
 upgradeLockBtn.addEventListener("click", upgradeLocks);
+expandFarmBtn.addEventListener("click", expandFarm);
 
 dissolveFarmBtn.addEventListener("click", () => {
   if (!state.online) {

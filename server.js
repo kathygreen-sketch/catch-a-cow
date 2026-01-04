@@ -11,6 +11,9 @@ const NIGHT_MS = 45000;   // 45 seconds night
 const SEASON_MS = 600000; // 10 minutes
 const GOLDEN_TIMES_MS = [180000, 420000]; // 3 min, 7 min
 const GOLDEN_DURATION_MS = 45000;
+const FARM_CAPACITY_STEP = 16;
+const FARM_BASE_SIZE = 160;
+const FARM_MAX_SIZE = 260;
 const WEATHER_TYPES = ["sun", "rain", "wind", "fog"];
 
 function loadCows() {
@@ -29,6 +32,11 @@ function rand(min, max) {
 
 function clamp(value, min, max) {
   return Math.max(min, Math.min(max, value));
+}
+
+function computeFarmSize(capacity) {
+  const steps = Math.max(0, Math.floor((capacity - FARM_CAPACITY_STEP) / FARM_CAPACITY_STEP));
+  return Math.min(FARM_MAX_SIZE, FARM_BASE_SIZE + steps * 14);
 }
 
 const BASE_COWS = loadCows();
@@ -333,6 +341,11 @@ function handleCapture(player, cowId, toolPower) {
     send(player.ws, { type: "event", message: `${cow.name} requires a ${cow.allowedTool}.` });
     return;
   }
+  const farm = getFarmById(player.id);
+  if (farm && farm.cowsList.length >= (farm.capacity || FARM_CAPACITY_STEP)) {
+    send(player.ws, { type: "event", message: "Farm is full. Expand it to hold more cows." });
+    return;
+  }
   const weatherBoost = cow.favoredWeather === state.weather ? -1 : 0;
   const difficulty = cow.difficulty + weatherBoost + getSeasonDifficultyBoost(player.id);
   const roll = Math.random() * 2;
@@ -342,7 +355,6 @@ function handleCapture(player, cowId, toolPower) {
     cow.bonus = cow.favoredWeather === state.weather;
     cow.seasonId = state.seasonId;
     cow.seasonValue = cow.golden ? 2 : 1;
-    const farm = getFarmById(player.id);
     if (farm) {
       farm.cowsList.push(cow.id);
       farm.seasonCows = (farm.seasonCows || 0) + cow.seasonValue;
@@ -590,14 +602,19 @@ function snapshot() {
       visibility: cow.visibility,
       allowedTool: cow.allowedTool,
     })),
-    farms: state.farms.map((farm) => ({
-      id: farm.id,
-      name: farm.name,
-      x: farm.x,
-      y: farm.y,
-      cowsList: farm.cowsList,
-      seasonCows: farm.seasonCows || 0,
-    })),
+    farms: state.farms.map((farm) => {
+      const capacity = Math.max(farm.capacity || FARM_CAPACITY_STEP, farm.cowsList.length);
+      return {
+        id: farm.id,
+        name: farm.name,
+        x: farm.x,
+        y: farm.y,
+        cowsList: farm.cowsList,
+        seasonCows: farm.seasonCows || 0,
+        capacity,
+        size: farm.size || computeFarmSize(capacity),
+      };
+    }),
     players: Array.from(state.players.values()).map((player) => ({
       id: player.id,
       name: player.name,
@@ -658,6 +675,8 @@ wss.on("connection", (ws) => {
     fenceStrength: 1,
     lockLevel: 0,
     seasonCows: 0,
+    capacity: FARM_CAPACITY_STEP,
+    size: computeFarmSize(FARM_CAPACITY_STEP),
   };
   state.farms.push(playerFarm);
 
@@ -716,6 +735,13 @@ wss.on("connection", (ws) => {
 
     if (message.type === "upgradeLock") {
       playerFarm.lockLevel = message.lockLevel || playerFarm.lockLevel;
+      return;
+    }
+
+    if (message.type === "expandFarm") {
+      const nextCapacity = Math.max(playerFarm.capacity || FARM_CAPACITY_STEP, message.capacity || 0);
+      playerFarm.capacity = nextCapacity;
+      playerFarm.size = computeFarmSize(nextCapacity);
       return;
     }
 
