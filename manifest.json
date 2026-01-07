@@ -3,8 +3,8 @@
   "short_name": "Catch a Cow",
   "start_url": "./index.html",
   "display": "standalone",
-  "background_color": "#f5f1e7",
-  "theme_color": "#e07a4e",
+  "background_color": "#e2f5cc",
+  "theme_color": "#b8746d",
   "icons": [
     {
       "src": "icon.svg",

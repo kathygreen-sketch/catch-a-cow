@@ -1,9 +1,18 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="Catch a Cow">
-  <rect width="128" height="128" rx="24" fill="#f5f1e7"/>
-  <rect x="18" y="72" width="92" height="24" rx="12" fill="#8ed081"/>
-  <rect x="30" y="42" width="68" height="32" rx="8" fill="#8a5c3d"/>
-  <rect x="42" y="32" width="44" height="12" rx="6" fill="#f2e6c9"/>
-  <rect x="34" y="66" width="12" height="10" rx="4" fill="#3a2b1a"/>
-  <rect x="82" y="66" width="12" height="10" rx="4" fill="#3a2b1a"/>
-  <rect x="48" y="88" width="32" height="16" rx="4" fill="#6b3f1d"/>
+  <rect width="128" height="128" rx="24" fill="#c9e79b"/>
+  <g stroke="#1f1a16" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round">
+    <ellipse cx="58" cy="76" rx="34" ry="20" fill="#f7f3ed"/>
+    <circle cx="94" cy="62" r="18" fill="#f7f3ed"/>
+    <ellipse cx="52" cy="74" rx="10" ry="8" fill="#4b3a33"/>
+    <ellipse cx="98" cy="66" rx="12" ry="10" fill="#b8746d"/>
+    <ellipse cx="84" cy="56" rx="7" ry="4.5" fill="#c9877b"/>
+    <path d="M84 40 L92 30 L100 42 Z" fill="#f1d07a"/>
+    <path d="M72 42 L80 32 L86 44 Z" fill="#f1d07a"/>
+    <circle cx="96" cy="58" r="2.6" fill="#1f1a16" stroke="none"/>
+    <path d="M90 68 Q96 72 102 66" fill="none"/>
+    <rect x="44" y="88" width="14" height="10" rx="4" fill="#2a231c"/>
+    <rect x="70" y="88" width="14" height="10" rx="4" fill="#2a231c"/>
+    <path d="M26 76 Q16 70 20 58" fill="none"/>
+    <circle cx="19" cy="58" r="4" fill="#2a231c"/>
+  </g>
 </svg>

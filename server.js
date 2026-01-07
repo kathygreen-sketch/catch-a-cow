@@ -620,7 +620,7 @@ function snapshot() {
       name: player.name,
       x: player.x,
       y: player.y,
-      color: player.color || "#2f2b23",
+      color: player.color || "#2a231c",
     })),
     weather: state.weather,
     dayTime: state.dayTime,
@@ -680,7 +680,7 @@ wss.on("connection", (ws) => {
   };
   state.farms.push(playerFarm);
 
-  const player = { id: playerId, ws, name: "New Farm", x: farmPos.x, y: farmPos.y, color: "#2f2b23" };
+  const player = { id: playerId, ws, name: "New Farm", x: farmPos.x, y: farmPos.y, color: "#2a231c" };
   state.players.set(playerId, player);
 
   send(ws, { type: "welcome", playerId, farm: playerFarm, spawn: farmPos });
@@ -695,7 +695,7 @@ wss.on("connection", (ws) => {
 
     if (message.type === "join") {
       player.name = message.name || "New Farm";
-      player.color = message.color || "#2f2b23";
+      player.color = message.color || "#2a231c";
       playerFarm.name = player.name;
       playerFarm.color = player.color;
       return;

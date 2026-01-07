@@ -58,7 +58,7 @@ function computeFarmSize(capacity) {
 
 const state = {
   farmName: "",
-  playerColor: "#2f2b23",
+  playerColor: "#2a231c",
   player: { x: WORLD_SIZE / 2, y: WORLD_SIZE / 2, vx: 0, vy: 0 },
   cows: [],
   captured: [],
@@ -129,7 +129,7 @@ function logEvent(message, toneType) {
 
 function setConnectionStatus(text, online) {
   connectionStatus.textContent = text;
-  connectionStatus.style.background = online ? "#cfe8b4" : "#f0d2c4";
+  connectionStatus.style.background = online ? "#dff2c8" : "#f2c9c4";
 }
 
 function connectToServer() {
@@ -1025,7 +1025,7 @@ function renderDefensePuzzle(puzzle, raidId, timeLimit) {
   puzzleBox.innerHTML = "";
 
   const warning = document.createElement("div");
-  warning.style.color = "#c44";
+  warning.style.color = "#b35353";
   warning.style.fontWeight = "bold";
   warning.textContent = "RAID INCOMING! Solve to defend!";
   puzzleBox.appendChild(warning);
@@ -1048,7 +1048,7 @@ function renderDefensePuzzle(puzzle, raidId, timeLimit) {
   const timer = document.createElement("div");
   timer.style.marginTop = "8px";
   timer.style.fontSize = "12px";
-  timer.style.color = "#c44";
+  timer.style.color = "#b35353";
   timer.textContent = `Time: ${Math.ceil(timeLimit / 1000)}s`;
   puzzleBox.appendChild(timer);
 
@@ -1171,7 +1171,7 @@ function drawWorld() {
   const viewH = canvas.height / ratio;
   ctx.clearRect(0, 0, viewW, viewH);
 
-  ctx.fillStyle = "#8bcf78";
+  ctx.fillStyle = "#bfe58c";
   ctx.fillRect(0, 0, viewW, viewH);
 
   const zoom = 1.4;
@@ -1234,9 +1234,9 @@ function drawWorld() {
     // Glow effect when happy
     if (isHappy || isGolden) {
       ctx.save();
-      ctx.shadowColor = isGolden ? "#ffb347" : "#ffdd44";
+      ctx.shadowColor = isGolden ? "#f1c16b" : "#f3d98a";
       ctx.shadowBlur = isGolden ? 22 : 15;
-      ctx.fillStyle = isGolden ? "rgba(255, 185, 90, 0.4)" : "rgba(255, 220, 100, 0.3)";
+      ctx.fillStyle = isGolden ? "rgba(241, 193, 107, 0.4)" : "rgba(243, 217, 138, 0.3)";
       ctx.beginPath();
       ctx.arc(screenX, drawY, isGolden ? 20 : 18, 0, Math.PI * 2);
       ctx.fill();
@@ -1244,29 +1244,29 @@ function drawWorld() {
     }
 
     // Cow body - pink tint when happy
-    ctx.fillStyle = isHappy ? "#c4826d" : "#8a5c3d";
+    ctx.fillStyle = isHappy ? "#c9877b" : "#f7f3ed";
     ctx.fillRect(screenX - 10, drawY - 8, 20, 16);
 
     // Cow head
-    ctx.fillStyle = isHappy ? "#fff0e0" : "#f2e6c9";
+    ctx.fillStyle = isHappy ? "#fbeee2" : "#efe3d3";
     ctx.fillRect(screenX - 6, drawY - 12, 12, 5);
 
     // Legs
-    ctx.fillStyle = "#3a2b1a";
+    ctx.fillStyle = "#2a231c";
     ctx.fillRect(screenX - 9, drawY - 2, 4, 4);
     ctx.fillRect(screenX + 5, drawY - 2, 4, 4);
 
     // Happy face when weather matches
     if (isHappy) {
       // Rosy cheeks
-      ctx.fillStyle = "rgba(255, 150, 150, 0.5)";
+      ctx.fillStyle = "rgba(198, 124, 116, 0.5)";
       ctx.beginPath();
       ctx.arc(screenX - 4, drawY - 9, 2, 0, Math.PI * 2);
       ctx.arc(screenX + 4, drawY - 9, 2, 0, Math.PI * 2);
       ctx.fill();
 
       // Smile
-      ctx.strokeStyle = "#3a2b1a";
+      ctx.strokeStyle = "#2a231c";
       ctx.lineWidth = 1;
       ctx.beginPath();
       ctx.arc(screenX, drawY - 8, 3, 0.2, Math.PI - 0.2);
@@ -1277,13 +1277,13 @@ function drawWorld() {
       if (heartPhase < 1) {
         const heartY = drawY - 18 - heartPhase * 15;
         const heartX = screenX + Math.sin(t * 3) * 5;
-        ctx.fillStyle = `rgba(255, 100, 120, ${1 - heartPhase})`;
+        ctx.fillStyle = `rgba(200, 110, 120, ${1 - heartPhase})`;
         ctx.font = "10px sans-serif";
         ctx.fillText("♥", heartX - 4, heartY);
       }
 
       // Sparkles around happy cow
-      ctx.fillStyle = "rgba(255, 255, 100, 0.8)";
+      ctx.fillStyle = "rgba(245, 228, 160, 0.8)";
       for (let i = 0; i < 3; i++) {
         const angle = t * 2 + (i * Math.PI * 2) / 3;
         const dist = 14 + Math.sin(t * 4 + i) * 3;
@@ -1297,7 +1297,7 @@ function drawWorld() {
     }
 
     if (isGolden) {
-      ctx.fillStyle = "rgba(255, 215, 120, 0.9)";
+      ctx.fillStyle = "rgba(241, 208, 122, 0.9)";
       ctx.font = "9px Rockwell, Palatino, Georgia, serif";
       ctx.textAlign = "center";
       ctx.textBaseline = "bottom";
@@ -1313,13 +1313,13 @@ function drawWorld() {
     if (py < -VIEW_PADDING || py > viewH + VIEW_PADDING) return;
 
     // Player body (different color from local player)
-    ctx.fillStyle = player.color || "#4a6b8a";
+    ctx.fillStyle = player.color || "#6f8f7c";
     ctx.fillRect(px - 8, py - 8, 16, 16);
     // Player hat
-    ctx.fillStyle = "#7eb5e0";
+    ctx.fillStyle = "#b7dccd";
     ctx.fillRect(px - 5, py - 13, 10, 5);
     // Player name
-    ctx.fillStyle = "#2f2b23";
+    ctx.fillStyle = "#2a231c";
     ctx.font = "9px Rockwell, Palatino, Georgia, serif";
     ctx.textAlign = "center";
     ctx.textBaseline = "bottom";
@@ -1331,9 +1331,9 @@ function drawWorld() {
   const playerY = state.player.y - camY;
   ctx.fillStyle = state.playerColor;
   ctx.fillRect(playerX - 8, playerY - 8, 16, 16);
-  ctx.fillStyle = "#f0b562";
+  ctx.fillStyle = "#f1d07a";
   ctx.fillRect(playerX - 5, playerY - 13, 10, 5);
-  ctx.fillStyle = "#2f2b23";
+  ctx.fillStyle = "#2a231c";
   ctx.font = "9px Rockwell, Palatino, Georgia, serif";
   ctx.textAlign = "center";
   ctx.textBaseline = "bottom";
@@ -1392,7 +1392,7 @@ function drawChatBubbles(camX, camY) {
     ctx.beginPath();
     ctx.roundRect(bubbleX, bubbleY, bubbleWidth, bubbleHeight, 4);
     ctx.fill();
-    ctx.strokeStyle = "#7f5c36";
+    ctx.strokeStyle = "#6a4a37";
     ctx.lineWidth = 1;
     ctx.stroke();
 
@@ -1405,7 +1405,7 @@ function drawChatBubbles(camX, camY) {
     ctx.fill();
 
     // Text
-    ctx.fillStyle = "#2f2b23";
+    ctx.fillStyle = "#2a231c";
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
     ctx.fillText(text, screenX, bubbleY + bubbleHeight / 2);
@@ -1491,14 +1491,14 @@ function drawEnvironmentOverlay(viewW, viewH) {
   // Sun rays during sunny day
   if (state.weather === "sun" && state.dayTime === "day") {
     const gradient = ctx.createRadialGradient(viewW * 0.8, 50, 0, viewW * 0.8, 50, 200);
-    gradient.addColorStop(0, "rgba(255, 245, 180, 0.3)");
-    gradient.addColorStop(0.5, "rgba(255, 245, 180, 0.1)");
-    gradient.addColorStop(1, "rgba(255, 245, 180, 0)");
+    gradient.addColorStop(0, "rgba(245, 230, 170, 0.3)");
+    gradient.addColorStop(0.5, "rgba(245, 230, 170, 0.1)");
+    gradient.addColorStop(1, "rgba(245, 230, 170, 0)");
     ctx.fillStyle = gradient;
     ctx.fillRect(0, 0, viewW, viewH);
 
     // Sun
-    ctx.fillStyle = "rgba(255, 220, 100, 0.8)";
+    ctx.fillStyle = "rgba(241, 208, 122, 0.85)";
     ctx.beginPath();
     ctx.arc(viewW * 0.85, 40, 25, 0, Math.PI * 2);
     ctx.fill();
@@ -1585,7 +1585,7 @@ function drawEnvironmentOverlay(viewW, viewH) {
     });
 
     // Leaves/debris
-    ctx.fillStyle = "rgba(120, 160, 80, 0.4)";
+    ctx.fillStyle = "rgba(120, 170, 90, 0.4)";
     for (let i = 0; i < 15; i++) {
       const t = performance.now() / 1000;
       const x = ((i * 130 + t * 80) % (viewW + 50)) - 25;
@@ -1623,11 +1623,11 @@ function drawFarm(camX, camY, farm) {
   const strength = farm.isPlayer ? state.fenceStrength + state.lockStrength : farm.strength;
   const height = farm.isPlayer ? state.fenceHeight : 2;
   const thickness = 3 + height * 0.7 + (farm.isPlayer ? state.lockStrength * 0.6 : 0);
-  ctx.strokeStyle = strength > 5 ? "#c37b3a" : "#7f5c36";
+  ctx.strokeStyle = strength > 5 ? "#c3914d" : "#6a4a37";
   ctx.lineWidth = thickness;
   ctx.strokeRect(screenX, screenY, farmSize, farmSize);
 
-  ctx.fillStyle = "#6b3f1d";
+  ctx.fillStyle = "#6a4a37";
   ctx.fillRect(screenX + farmSize / 2 - 10, screenY + farmSize / 2 - 10, 20, 20);
 
   // Draw locks at corners based on lock level
@@ -1642,9 +1642,9 @@ function drawFarm(camX, camY, farm) {
 
     for (let i = 0; i < Math.min(locksToDraw, 4); i++) {
       const pos = lockPositions[i];
-      ctx.fillStyle = "#d3a84f";
+      ctx.fillStyle = "#f1d07a";
       ctx.fillRect(pos.x, pos.y, 8, 10);
-      ctx.strokeStyle = "#8b6a2b";
+      ctx.strokeStyle = "#b4833f";
       ctx.lineWidth = 2;
       ctx.strokeRect(pos.x, pos.y, 8, 10);
       ctx.beginPath();
@@ -1667,9 +1667,9 @@ function renderFarmCows(screenX, screenY, farmSize, cowCount) {
     const col = index % grid;
     const cx = screenX + gap * (col + 1);
     const cy = screenY + gap * (row + 1);
-    ctx.fillStyle = "#9a6a44";
+    ctx.fillStyle = "#f1e3d2";
     ctx.fillRect(cx - 7, cy - 6, 14, 12);
-    ctx.fillStyle = "#f2e6c9";
+    ctx.fillStyle = "#e4d3c1";
     ctx.fillRect(cx - 4, cy - 10, 8, 4);
   }
 }
@@ -1679,12 +1679,12 @@ function renderFarmNameplate(screenX, screenY, farmSize, name, isPlayer) {
   const plateH = 18;
   const plateX = screenX + (farmSize - plateW) / 2;
   const plateY = screenY - 26;
-  ctx.fillStyle = isPlayer ? "#f5d27a" : "#e6dfcf";
+  ctx.fillStyle = isPlayer ? "#f1d07a" : "#ede3d4";
   ctx.fillRect(plateX, plateY, plateW, plateH);
-  ctx.strokeStyle = "#7f5c36";
+  ctx.strokeStyle = "#6a4a37";
   ctx.lineWidth = 2;
   ctx.strokeRect(plateX, plateY, plateW, plateH);
-  ctx.fillStyle = "#2f2b23";
+  ctx.fillStyle = "#2a231c";
   ctx.font = "10px Rockwell, Palatino, Georgia, serif";
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
@@ -1750,21 +1750,21 @@ function renderHoverTooltip() {
   const height = 16 * lines.length + 10;
 
   ctx.fillStyle = "rgba(255, 255, 255, 0.9)";
-  ctx.strokeStyle = "#7f5c36";
+  ctx.strokeStyle = "#6a4a37";
   ctx.lineWidth = 2;
   ctx.fillRect(plateX, plateY, width, height);
   ctx.strokeRect(plateX, plateY, width, height);
 
-  ctx.fillStyle = "#2f2b23";
+  ctx.fillStyle = "#2a231c";
   ctx.font = "10px Rockwell, Palatino, Georgia, serif";
   ctx.textAlign = "left";
   ctx.textBaseline = "top";
   lines.forEach((line, index) => {
     if (line === "[Click to raid]") {
-      ctx.fillStyle = "#c44";
+      ctx.fillStyle = "#b35353";
     }
     ctx.fillText(line, plateX + 6, plateY + 6 + index * 14);
-    ctx.fillStyle = "#2f2b23";
+    ctx.fillStyle = "#2a231c";
   });
 
   ctx.restore();
@@ -1791,10 +1791,10 @@ function drawMiniMap() {
   const w = minimap.width;
   const h = minimap.height;
   miniCtx.clearRect(0, 0, w, h);
-  miniCtx.fillStyle = "#d9f2c1";
+  miniCtx.fillStyle = "#dff2c8";
   miniCtx.fillRect(0, 0, w, h);
 
-  miniCtx.strokeStyle = "#7f5c36";
+  miniCtx.strokeStyle = "#6a4a37";
   miniCtx.lineWidth = 2;
   miniCtx.strokeRect(2, 2, w - 4, h - 4);
 
@@ -1802,7 +1802,7 @@ function drawMiniMap() {
   const scaleY = h / WORLD_SIZE;
 
   // wild cows
-  miniCtx.fillStyle = "#7d4d2c";
+  miniCtx.fillStyle = "#5a4339";
   state.cows.forEach((cow) => {
     if (cow.status !== "wild") return;
     miniCtx.fillRect(cow.x * scaleX, cow.y * scaleY, 2, 2);
@@ -1811,9 +1811,9 @@ function drawMiniMap() {
   // farms
   const farms = getAllFarms();
   farms.forEach((farm) => {
-    miniCtx.fillStyle = farm.isPlayer ? "#e07a4e" : "#b09a7a";
+    miniCtx.fillStyle = farm.isPlayer ? "#b8746d" : "#c1aa8c";
     miniCtx.fillRect(farm.x * scaleX - 3, farm.y * scaleY - 3, 6, 6);
-    miniCtx.fillStyle = "#2f2b23";
+    miniCtx.fillStyle = "#2a231c";
     miniCtx.font = "9px Rockwell, Palatino, Georgia, serif";
     miniCtx.textAlign = "left";
     miniCtx.textBaseline = "middle";
@@ -1825,7 +1825,7 @@ function drawMiniMap() {
   });
 
   // player position
-  miniCtx.fillStyle = "#2f2b23";
+  miniCtx.fillStyle = "#2a231c";
   miniCtx.fillRect(state.player.x * scaleX - 2, state.player.y * scaleY - 2, 4, 4);
 }
 
@@ -2096,7 +2096,7 @@ chatInput.addEventListener("keydown", (event) => {
 startBtn.addEventListener("click", () => {
   initAudio();
   const name = farmNameInput.value.trim() || "Meadowlight";
-  const color = farmColorInput ? farmColorInput.value : "#2f2b23";
+  const color = farmColorInput ? farmColorInput.value : "#2a231c";
   state.farmName = name;
   state.playerColor = color;
   startModal.style.display = "none";
