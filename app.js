@@ -870,22 +870,13 @@ function hashSeed(text) {
   return hash >>> 0;
 }
 
-function makeSeasonRng(cow) {
-  const seasonTag = state.seasonId || 1;
-  const seed = hashSeed(`${cow.id}-${seasonTag}`);
-  let t = seed;
-  return () => {
-    t += 0x6d2b79f5;
-    let r = t;
-    r = Math.imul(r ^ (r >>> 15), r | 1);
-    r ^= r + Math.imul(r ^ (r >>> 7), r | 61);
-    return ((r ^ (r >>> 14)) >>> 0) / 4294967296;
-  };
+function makeSeasonRng() {
+  return Math.random;
 }
 
 function generateCapturePuzzle(cow, toolType) {
   const grade = getGradeLevel(cow.difficulty);
-  const rand = makeSeasonRng(cow);
+  const rand = makeSeasonRng();
   const pickInt = (min, maxExclusive) => Math.floor(rand() * (maxExclusive - min)) + min;
   if (toolType === "rope") {
     if (grade <= 5) {
