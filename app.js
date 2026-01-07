@@ -824,16 +824,26 @@ function renderPuzzle() {
 }
 
 function deriveExpectedAnswer(puzzle) {
-  if (!puzzle || typeof puzzle.question !== "string") return puzzle.answer;
-  const systemMatch = puzzle.question.match(/x \\+ y = ([\\d.]+), x - y = ([\\d.]+)/);
+  if (!puzzle) return NaN;
+  if (Number.isFinite(puzzle.answer)) return puzzle.answer;
+  const direct = parseFloat(puzzle.answer);
+  if (Number.isFinite(direct)) return direct;
+  if (typeof puzzle.question !== "string") return NaN;
+
+  const systemMatch = puzzle.question.match(
+    /x\s*\+\s*y\s*=\s*(-?\d+(?:\.\d+)?),\s*x\s*-\s*y\s*=\s*(-?\d+(?:\.\d+)?)/
+  );
   if (systemMatch) {
     const sum = parseFloat(systemMatch[1]);
     const diff = parseFloat(systemMatch[2]);
     if (Number.isFinite(sum) && Number.isFinite(diff)) {
-      return (sum + diff) / 2;
+      return puzzle.question.includes("What is y")
+        ? (sum - diff) / 2
+        : (sum + diff) / 2;
     }
   }
-  const triangleMatch = puzzle.question.match(/base ([\\d.]+) and height ([\\d.]+)/);
+
+  const triangleMatch = puzzle.question.match(/base ([\d.]+) and height ([\d.]+)/);
   if (triangleMatch) {
     const base = parseFloat(triangleMatch[1]);
     const height = parseFloat(triangleMatch[2]);
@@ -841,7 +851,7 @@ function deriveExpectedAnswer(puzzle) {
       return (base * height) / 2;
     }
   }
-  return puzzle.answer;
+  return NaN;
 }
 
 function getGradeLevel(difficulty) {
@@ -916,7 +926,7 @@ function generateCapturePuzzle(cow, toolType) {
     const diff = x - y;
     return {
       question: `Grade 8 (Difficulty ${cow.difficulty}): Solve the system: x + y = ${sum}, x - y = ${diff}. What is x?`,
-      answer: (sum + diff) / 2,
+      answer: x,
       hint: "Add the two equations to eliminate y.",
     };
   }
@@ -1653,23 +1663,25 @@ function drawFarm(camX, camY, farm) {
     }
   }
 
-  renderFarmCows(screenX, screenY, farmSize, farm.isPlayer ? state.captured.length : farm.cows);
+  renderFarmCows(screenX, screenY, farmSize, farm.isPlayer ? state.captured.length : farm.cows, farm.isPlayer);
   renderFarmNameplate(screenX, screenY, farmSize, farm.name, farm.isPlayer);
 }
 
-function renderFarmCows(screenX, screenY, farmSize, cowCount) {
+function renderFarmCows(screenX, screenY, farmSize, cowCount, isPlayer) {
   if (cowCount === 0) return;
   const cowsToShow = Math.min(12, cowCount);
   const grid = 4;
   const gap = farmSize / (grid + 1);
+  const bodyColor = isPlayer ? "#5a3e34" : "#f1e3d2";
+  const headColor = isPlayer ? "#7a5a4a" : "#e4d3c1";
   for (let index = 0; index < cowsToShow; index += 1) {
     const row = Math.floor(index / grid);
     const col = index % grid;
     const cx = screenX + gap * (col + 1);
     const cy = screenY + gap * (row + 1);
-    ctx.fillStyle = "#f1e3d2";
+    ctx.fillStyle = bodyColor;
     ctx.fillRect(cx - 7, cy - 6, 14, 12);
-    ctx.fillStyle = "#e4d3c1";
+    ctx.fillStyle = headColor;
     ctx.fillRect(cx - 4, cy - 10, 8, 4);
   }
 }
